@@ -11,7 +11,7 @@ class TraderRAGChatbot:
         load_dotenv()
 
         self.groq_api_key = os.getenv("GROQ_API_KEY")
-        self.groq_model = os.getenv("GROQ_MODEL", "llama3-8b-8192")
+        self.groq_model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
         self.embedding_model_name = os.getenv(
             "EMBEDDING_MODEL",
             "sentence-transformers/paraphrase-MiniLM-L6-v2"

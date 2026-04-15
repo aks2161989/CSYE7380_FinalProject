@@ -1,0 +1,34 @@
+# 🔒 Environment variables (VERY IMPORTANT)
+.env
+
+# 🐍 Virtual environment
+venv/
+.env/
+ENV/
+env/
+
+# 🧠 Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 📦 Installed packages (just in case)
+site-packages/
+
+# 🧪 VS Code settings (optional)
+.vscode/
+
+# 📊 Vector database (generated, not needed in repo)
+vector_store/
+
+# 🧾 Logs / temp files
+*.log
+*.tmp
+
+# 🪟 Windows specific
+Thumbs.db
+desktop.ini
+
+# 🧪 Jupyter (if anyone accidentally uses it)
+.ipynb_checkpoints/

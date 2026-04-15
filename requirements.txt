@@ -1,0 +1,10 @@
+pandas
+openpyxl
+requests
+python-dotenv
+langchain
+langchain-community
+langchain-huggingface
+sentence-transformers
+faiss-cpu
+groq

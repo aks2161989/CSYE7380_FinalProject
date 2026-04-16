@@ -7,17 +7,20 @@ and generates an answer using FLAN-T5 (local) or Groq Llama 3 (if API key is set
 
 import os
 
+from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-from config import VECTORSTORE_DIR, EMBEDDING_MODEL, LOCAL_MODEL, TOP_K
+from config import VECTORSTORE_DIR, EMBEDDING_MODEL, LOCAL_MODEL, GROQ_MODEL, TOP_K
 
+load_dotenv()
 
 # Module-level singletons (loaded once, reused across calls)
 _vectorstore = None
 _model = None
 _tokenizer = None
+_groq_client = None
 
 
 def get_vectorstore():
@@ -33,43 +36,67 @@ def get_vectorstore():
 
 def get_llm():
     """Load the generation model (cached after first call)."""
-    global _model, _tokenizer
-    if _model is None:
+    global _model, _tokenizer, _groq_client
+    if _model is None and _groq_client is None:
         groq_key = os.environ.get("GROQ_API_KEY")
         if groq_key:
-            # Use Groq cloud LLM for better quality
-            from langchain_groq import ChatGroq
-            _model = ChatGroq(
-                model_name="llama3-8b-8192",
-                temperature=0.3,
-            )
-            _tokenizer = None
-            print("Using Groq Llama 3 for generation")
+            from groq import Groq
+            _groq_client = Groq(api_key=groq_key)
+            print(f"Using Groq {GROQ_MODEL} for generation")
         else:
-            # Use local FLAN-T5
             print(f"Loading {LOCAL_MODEL} (this may take a moment on first run)...")
             _tokenizer = AutoTokenizer.from_pretrained(LOCAL_MODEL)
             _model = AutoModelForSeq2SeqLM.from_pretrained(LOCAL_MODEL)
             print(f"Loaded {LOCAL_MODEL}")
-    return _model, _tokenizer
+    return _model, _tokenizer, _groq_client
 
 
-def build_prompt(question, context_docs):
-    """Build the prompt from retrieved documents and the user question."""
-    # Use top 3 chunks for the prompt (keeps within FLAN-T5 token limits)
+def build_context(docs):
+    """Build structured context string from retrieved documents."""
     context_parts = []
-    for doc in context_docs[:3]:
-        context_parts.append(doc.page_content)
-    context = "\n\n".join(context_parts)
+    for i, doc in enumerate(docs, start=1):
+        meta = doc.metadata
+        source = meta.get("source", "unknown")
+        page = meta.get("page")
+        header = f"[Context {i}] Source: {source}"
+        if page is not None:
+            header += f" (page {page + 1})"
+        context_parts.append(f"{header}\n{doc.page_content}")
+    return "\n\n".join(context_parts)
 
-    prompt = (
+
+def build_groq_prompt(question, context):
+    """Build the detailed prompt for Groq Llama 3 (from teammate's rag_chat.py)."""
+    return f"""You are a Warren Buffett trader/investor chatbot built from team-prepared study material.
+Answer the user's question using ONLY the retrieved context below.
+
+Rules:
+- Do not mention "Context 1", "Context 2", or similar references.
+- Do not say "according to the context".
+- Give a direct, natural answer.
+- Prefer 2-4 sentences.
+- Be specific when the dataset supports specifics.
+- If the question asks how Buffett adapted or evolved, prioritize concrete historical changes in his strategy (e.g., shift from buying cheap stocks to high-quality businesses) if present in the context.
+- Avoid vague summaries like "he learned from experience" unless no more specific answer is available.
+- If the answer is not clearly supported by the retrieved material, say:
+  "I don't have enough grounded information in the dataset to answer that confidently."
+
+Retrieved Context:
+{context}
+
+User Question:
+{question}"""
+
+
+def build_local_prompt(question, context):
+    """Build a shorter prompt for FLAN-T5 (512-token input limit)."""
+    return (
         "Use the following context to give a detailed answer to the question. "
         "If the answer is not in the context, say so.\n\n"
         f"Context:\n{context}\n\n"
         f"Question: {question}\n\n"
         "Detailed answer:"
     )
-    return prompt
 
 
 def ask(question):
@@ -82,24 +109,27 @@ def ask(question):
             - "sources": list of dicts with "content", "source", "page" keys
     """
     vectorstore = get_vectorstore()
-    model, tokenizer = get_llm()
+    model, tokenizer, groq_client = get_llm()
 
     # Retrieve top-k relevant documents
     docs = vectorstore.similarity_search(question, k=TOP_K)
-
-    # Build prompt
-    prompt = build_prompt(question, docs)
+    context = build_context(docs)
 
     # Generate answer
-    if tokenizer is not None:
-        # Local FLAN-T5: tokenize, truncate to 512 tokens, and generate
+    if groq_client is not None:
+        prompt = build_groq_prompt(question, context)
+        response = groq_client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        answer = response.choices[0].message.content.strip()
+    else:
+        # Local FLAN-T5: use top 3 docs only, truncate to 512 tokens
+        short_context = build_context(docs[:3])
+        prompt = build_local_prompt(question, short_context)
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
         outputs = model.generate(**inputs, max_new_tokens=256)
         answer = tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
-    else:
-        # Groq cloud LLM
-        response = model.invoke(prompt)
-        answer = response.content.strip()
 
     # Format sources for display
     sources = []

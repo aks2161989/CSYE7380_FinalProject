@@ -60,19 +60,23 @@ class TraderRAGChatbot:
 You are a Warren Buffett trader/investor chatbot built from team-prepared study material.
 
 Answer the user's question using ONLY the retrieved context below.
-If the answer is not clearly supported by the context, say:
-"I don't have enough grounded information in the dataset to answer that confidently."
+
+Rules:
+- Do not mention "Context 1", "Context 2", or similar references.
+- Do not say "according to the context".
+- Give a direct, natural answer.
+- Prefer 2-4 sentences.
+- Be specific when the dataset supports specifics.
+- If the question asks how Buffett adapted or evolved, prioritize concrete historical changes in his strategy (e.g., shift from buying cheap stocks to high-quality businesses) if present in the context.
+- Avoid vague summaries like "he learned from experience" unless no more specific answer is available.
+- If the answer is not clearly supported by the retrieved material, say:
+  "I don't have enough grounded information in the dataset to answer that confidently."
 
 Retrieved Context:
 {context}
 
 User Question:
 {query}
-
-Instructions:
-- Be concise but informative.
-- Prefer grounded facts from the retrieved context.
-- If helpful, mention the relevant label category.
 """
 
         response = self.client.chat.completions.create(

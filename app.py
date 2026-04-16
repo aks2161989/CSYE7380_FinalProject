@@ -47,7 +47,7 @@ with st.sidebar:
             st.session_state.pending_question = sample
 
     st.divider()
-    st.caption("Data sources: 1,010-page PDF of shareholder letters + 996 Q&A pairs across 6 categories.")
+    st.caption("Data sources: 1,010-page PDF of shareholder letters + 5,992 Q&A pairs across 7 datasets.")
 
 # --- Title ---
 st.title(APP_TITLE)

@@ -14,6 +14,7 @@ CSV_FILES = [
         "Warren Buffett Data - Risk Management.csv",
         "Warren Buffett Data - Strategy Development.csv",
         "Warren Buffett Data - Timing.csv",
+        "Dataset_Warren_Buffet_Clean.csv",
     ]
 ]
 VECTORSTORE_DIR = os.path.join(BASE_DIR, "vectorstore")

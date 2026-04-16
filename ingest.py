@@ -48,15 +48,18 @@ def load_csvs():
 
     for csv_path in CSV_FILES:
         filename = os.path.basename(csv_path)
-        # Extract label from filename, e.g. "Warren Buffett Data - Psychology.csv" -> "Psychology"
-        label = filename.replace("Warren Buffett Data - ", "").replace(".csv", "")
         count = 0
 
         with open(csv_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                question = row["Questions"].strip()
-                answer = row["Answers"].strip()
+                # Handle both column naming conventions
+                question = (row.get("Questions") or row.get("question", "")).strip()
+                answer = (row.get("Answers") or row.get("answer", "")).strip()
+                label = (row.get("Label") or row.get("refined_category") or "").strip()
+
+                if not question or not answer:
+                    continue
 
                 # Skip duplicate "expanded perspective" rows
                 if "(expanded perspective)" in question.lower():
@@ -68,10 +71,11 @@ def load_csvs():
                     continue
                 seen.add(key)
 
+                source_tag = f"qa_{label.lower().replace(' ', '_').replace('&', 'and')}" if label else "qa"
                 content = f"Question: {question}\nAnswer: {answer}"
                 docs.append(Document(
                     page_content=content,
-                    metadata={"source": f"qa_{label.lower().replace(' ', '_')}", "question": question},
+                    metadata={"source": source_tag, "question": question},
                 ))
                 count += 1
 

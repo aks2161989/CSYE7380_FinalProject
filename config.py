@@ -28,7 +28,7 @@ EMBEDDING_MODEL = "sentence-transformers/paraphrase-MiniLM-L6-v2"
 
 # --- Generation model ---
 LOCAL_MODEL = "google/flan-t5-base"         # runs on CPU, ~900MB download
-GROQ_MODEL = "llama3-8b-8192"              # optional, needs GROQ_API_KEY env var
+GROQ_MODEL = "llama-3.3-70b-versatile"     # optional, needs GROQ_API_KEY env var
 
 # --- Retrieval ---
 TOP_K = 5               # number of chunks to retrieve from FAISS

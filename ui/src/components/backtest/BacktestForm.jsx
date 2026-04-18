@@ -1,0 +1,77 @@
+import { useState } from "react";
+import { Play } from "lucide-react";
+import { stockList } from "../../data/mockStockData";
+import { strategies } from "../../data/mockBacktest";
+
+export default function BacktestForm({ onRun, loading }) {
+  const [symbol, setSymbol] = useState("AAPL");
+  const [strategy, setStrategy] = useState("ma_crossover");
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    onRun({ symbol, strategy });
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+      <h3 className="mb-4 text-sm font-medium uppercase tracking-wider text-slate-500">
+        Configure Backtest
+      </h3>
+      <div className="space-y-4">
+        {/* Symbol */}
+        <div>
+          <label className="mb-1 block text-xs text-slate-400">Stock Symbol</label>
+          <select
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value)}
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-500/50"
+          >
+            {stockList.map((s) => (
+              <option key={s.symbol} value={s.symbol}>{s.symbol} — {s.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Strategy */}
+        <div>
+          <label className="mb-2 block text-xs text-slate-400">Strategy</label>
+          <div className="space-y-2">
+            {strategies.map((s) => (
+              <label
+                key={s.id}
+                className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition-all ${
+                  strategy === s.id
+                    ? "border-amber-500/50 bg-amber-500/5"
+                    : "border-slate-700 hover:border-slate-600"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="strategy"
+                  value={s.id}
+                  checked={strategy === s.id}
+                  onChange={() => setStrategy(s.id)}
+                  className="mt-0.5 accent-amber-500"
+                />
+                <div>
+                  <p className="text-sm font-medium text-slate-200">{s.name}</p>
+                  <p className="text-xs text-slate-500">{s.description}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Submit */}
+        <button
+          type="submit"
+          disabled={loading}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition-all hover:bg-amber-400 disabled:opacity-50"
+        >
+          <Play size={14} />
+          {loading ? "Running..." : "Run Backtest"}
+        </button>
+      </div>
+    </form>
+  );
+}

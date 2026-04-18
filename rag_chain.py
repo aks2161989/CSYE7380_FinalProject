@@ -13,6 +13,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 from config import VECTORSTORE_DIR, EMBEDDING_MODEL, LOCAL_MODEL, GROQ_MODEL, TOP_K
+from stock_analysis import is_stock_query, extract_ticker, fetch_stock_data, format_stock_summary
 
 load_dotenv()
 
@@ -88,6 +89,44 @@ User Question:
 {question}"""
 
 
+def build_stock_groq_prompt(question, context, stock_summary):
+    """Build a prompt that combines stock data, backtest results, and Buffett's principles."""
+    return f"""You are a Warren Buffett-style investment analyst. The user is asking about a specific stock.
+You have three sources of information:
+1. Real financial data and backtest results for the stock (below)
+2. Warren Buffett's investment principles retrieved from shareholder letters and Q&A datasets
+
+Analyze the stock using Buffett's principles. Be specific about the numbers.
+
+Rules:
+- Reference actual metrics (P/E, ROE, debt, margins) from the stock data.
+- If backtest results are available, mention how trading strategies (MA crossover, RSI) performed on this stock -- this shows the stock's historical trading behavior.
+- Apply Buffett's known criteria: margin of safety, economic moat, return on equity, low debt, consistent earnings, competent management.
+- Give a clear assessment: would Buffett likely be interested or not, and why.
+- Be honest about limitations -- you cannot predict the future and backtests reflect past performance only.
+- Keep it to 5-8 sentences.
+
+Stock Data & Backtest Results:
+{stock_summary}
+
+Buffett's Investment Principles (from dataset):
+{context}
+
+User Question:
+{question}"""
+
+
+def build_stock_local_prompt(question, context, stock_summary):
+    """Build a shorter stock analysis prompt for FLAN-T5."""
+    return (
+        "Analyze this stock using Warren Buffett's investment principles.\n\n"
+        f"Stock Data:\n{stock_summary}\n\n"
+        f"Buffett's Principles:\n{context}\n\n"
+        f"Question: {question}\n\n"
+        "Analysis:"
+    )
+
+
 def build_local_prompt(question, context):
     """Build a shorter prompt for FLAN-T5 (512-token input limit)."""
     return (
@@ -102,22 +141,43 @@ def build_local_prompt(question, context):
 def ask(question):
     """
     Retrieve relevant chunks and generate an answer.
+    If the question is about a specific stock, fetch real market data
+    and analyze it through Buffett's investment principles.
 
     Returns:
         dict with keys:
             - "answer": the generated answer string
             - "sources": list of dicts with "content", "source", "page" keys
+            - "stock_data": dict of stock metrics (only if stock query)
     """
     vectorstore = get_vectorstore()
     model, tokenizer, groq_client = get_llm()
 
-    # Retrieve top-k relevant documents
-    docs = vectorstore.similarity_search(question, k=TOP_K)
+    # Check if this is a stock analysis query
+    stock_data = None
+    stock_summary = None
+    if is_stock_query(question):
+        ticker = extract_ticker(question)
+        if ticker:
+            stock_data = fetch_stock_data(ticker)
+            if stock_data:
+                stock_summary = format_stock_summary(stock_data)
+
+    # Retrieve Buffett's principles -- use investment-focused search for stock queries
+    if stock_data:
+        search_query = "investment criteria value investing margin of safety return on equity"
+        docs = vectorstore.similarity_search(search_query, k=TOP_K)
+    else:
+        docs = vectorstore.similarity_search(question, k=TOP_K)
+
     context = build_context(docs)
 
     # Generate answer
     if groq_client is not None:
-        prompt = build_groq_prompt(question, context)
+        if stock_data and stock_summary:
+            prompt = build_stock_groq_prompt(question, context, stock_summary)
+        else:
+            prompt = build_groq_prompt(question, context)
         response = groq_client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
@@ -126,13 +186,22 @@ def ask(question):
     else:
         # Local FLAN-T5: use top 3 docs only, truncate to 512 tokens
         short_context = build_context(docs[:3])
-        prompt = build_local_prompt(question, short_context)
+        if stock_data and stock_summary:
+            prompt = build_stock_local_prompt(question, short_context, stock_summary)
+        else:
+            prompt = build_local_prompt(question, short_context)
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
         outputs = model.generate(**inputs, max_new_tokens=256)
         answer = tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
 
     # Format sources for display
     sources = []
+    if stock_data:
+        sources.append({
+            "content": stock_summary,
+            "source": "yahoo_finance",
+            "page": None,
+        })
     for doc in docs:
         sources.append({
             "content": doc.page_content,
@@ -140,7 +209,10 @@ def ask(question):
             "page": doc.metadata.get("page"),
         })
 
-    return {"answer": answer, "sources": sources}
+    result = {"answer": answer, "sources": sources}
+    if stock_data:
+        result["stock_data"] = stock_data
+    return result
 
 
 if __name__ == "__main__":

@@ -45,7 +45,7 @@ with st.sidebar:
         "What happened with Berkshire's textile operations?",
         "How does Buffett approach risk management?",
         "Why does Buffett still live in Omaha?",
-        "What is Buffett's investment philosophy?",
+        "What would Buffett think of AAPL stock?",
     ]
     for sample in sample_questions:
         if st.button(sample, key=sample):
@@ -59,9 +59,73 @@ tab_chat, tab_stocks = st.tabs(["💬 Chat Bot", "📊 Stock Analysis & Backtest
 
 
 # ═══════════════════════════ TAB 1: CHAT BOT ═════════════════════════════════
+
+def display_stock_card(stock_data):
+    """Display a stock metrics card in the chat."""
+    d = stock_data
+    st.markdown(f"**{d['name']}** ({d['ticker']}) — {d['sector']}")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Price", f"${d['current_price']:.2f}" if d['current_price'] else "N/A")
+    with col2:
+        st.metric("P/E Ratio", f"{d['trailing_pe']:.1f}" if d['trailing_pe'] else "N/A")
+    with col3:
+        st.metric("ROE", f"{d['roe'] * 100:.1f}%" if d['roe'] else "N/A")
+    with col4:
+        st.metric("Debt/Equity", f"{d['debt_to_equity']:.1f}" if d['debt_to_equity'] else "N/A")
+    col5, col6, col7, col8 = st.columns(4)
+    with col5:
+        st.metric("Profit Margin", f"{d['profit_margins'] * 100:.1f}%" if d['profit_margins'] else "N/A")
+    with col6:
+        st.metric("Dividend Yield", f"{d['dividend_yield'] * 100:.2f}%" if d['dividend_yield'] else "N/A")
+    with col7:
+        st.metric("1Y Return", f"{d['1y_return']:.1f}%" if d['1y_return'] is not None else "N/A")
+    with col8:
+        st.metric("5Y Return", f"{d['5y_return']:.1f}%" if d['5y_return'] is not None else "N/A")
+    bt_ma = d.get("backtest_ma")
+    bt_rsi = d.get("backtest_rsi")
+    if bt_ma or bt_rsi:
+        st.markdown("**Backtest Results** (2018-present)")
+        bc1, bc2 = st.columns(2)
+        if bt_ma:
+            with bc1:
+                st.markdown("_MA Crossover (20/50)_")
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Return", f"{bt_ma['total_return']:.1%}")
+                m2.metric("Sharpe", f"{bt_ma['sharpe_ratio']:.2f}")
+                m3.metric("Win Rate", f"{bt_ma['win_rate']:.0%}")
+        if bt_rsi:
+            with bc2:
+                st.markdown("_RSI Strategy (30/70)_")
+                r1, r2, r3 = st.columns(3)
+                r1.metric("Return", f"{bt_rsi['total_return']:.1%}")
+                r2.metric("Sharpe", f"{bt_rsi['sharpe_ratio']:.2f}")
+                r3.metric("Win Rate", f"{bt_rsi['win_rate']:.0%}")
+
+
+def display_sources(sources):
+    """Display source citations in an expander."""
+    if not sources:
+        return
+    with st.expander("View Sources"):
+        for i, src in enumerate(sources):
+            raw = src["source"]
+            if raw == "yahoo_finance":
+                label = "Yahoo Finance (Live Data + Backtest)"
+            elif raw == "shareholder_letter":
+                label = "Shareholder Letter"
+                if src.get("page") is not None:
+                    label += f" (page {src['page'] + 1})"
+            else:
+                label = raw.replace("qa_", "Q&A: ").replace("_", " ").title()
+            st.markdown(f"**Source {i+1}** — _{label}_")
+            st.text(src["content"][:300] + ("..." if len(src["content"]) > 300 else ""))
+            st.divider()
+
+
 with tab_chat:
     st.title(APP_TITLE)
-    st.caption("Ask questions about Warren Buffett and Berkshire Hathaway")
+    st.caption("Ask questions about Warren Buffett, or ask what he'd think of any stock ")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -69,18 +133,12 @@ with tab_chat:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
-            if "sources" in msg and msg["sources"]:
-                with st.expander("View Sources"):
-                    for i, src in enumerate(msg["sources"]):
-                        label = src["source"].replace("qa_", "Q&A: ").replace("_", " ").title()
-                        if src.get("page") is not None:
-                            label += f" (page {src['page'] + 1})"
-                        st.markdown(f"**Source {i+1}** — _{label}_")
-                        st.text(src["content"][:300] + ("..." if len(src["content"]) > 300 else ""))
-                        st.divider()
+            if msg.get("stock_data"):
+                display_stock_card(msg["stock_data"])
+            display_sources(msg.get("sources"))
 
     pending = st.session_state.pop("pending_question", None)
-    user_input = st.chat_input("Ask a question about Warren Buffett...")
+    user_input = st.chat_input("Ask about Buffett")
     question = pending or user_input
 
     if question:
@@ -89,23 +147,19 @@ with tab_chat:
             st.write(question)
 
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
+            is_stock = any(kw in question.lower() for kw in ["stock", "think", "invest", "buy", "sell"])
+            with st.spinner("Analyzing..." if is_stock else "Thinking..."):
                 result = ask(question)
+            if result.get("stock_data"):
+                display_stock_card(result["stock_data"])
             st.write(result["answer"])
-            if result["sources"]:
-                with st.expander("View Sources"):
-                    for i, src in enumerate(result["sources"]):
-                        label = src["source"].replace("qa_", "Q&A: ").replace("_", " ").title()
-                        if src.get("page") is not None:
-                            label += f" (page {src['page'] + 1})"
-                        st.markdown(f"**Source {i+1}** — _{label}_")
-                        st.text(src["content"][:300] + ("..." if len(src["content"]) > 300 else ""))
-                        st.divider()
+            display_sources(result.get("sources"))
 
         st.session_state.messages.append({
             "role": "assistant",
             "content": result["answer"],
-            "sources": result["sources"],
+            "sources": result.get("sources"),
+            "stock_data": result.get("stock_data"),
         })
 
 

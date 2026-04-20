@@ -11,12 +11,12 @@ export default function ChatSidebar({
 }) {
   return (
     <div
-      className={`flex h-screen shrink-0 flex-col border-r border-slate-800 bg-slate-950/80 transition-all duration-300 ${
+      className={`flex h-screen shrink-0 flex-col border-r border-slate-200 bg-slate-100/80 transition-all duration-300 dark:border-slate-800 dark:bg-slate-950/80 ${
         collapsed ? "w-12" : "w-64"
       }`}
     >
       {/* Toggle button */}
-      <div className={`flex items-center border-b border-slate-800 ${collapsed ? "justify-center px-0 py-3" : "justify-between px-4 py-3"}`}>
+      <div className={`flex items-center border-b border-slate-200 dark:border-slate-800 ${collapsed ? "justify-center px-0 py-3" : "justify-between px-4 py-3"}`}>
         {!collapsed && (
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
             History
@@ -24,7 +24,7 @@ export default function ChatSidebar({
         )}
         <button
           onClick={onToggle}
-          className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300"
+          className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
@@ -41,8 +41,8 @@ export default function ChatSidebar({
                 onClick={() => onSelect(conv.id)}
                 className={`mx-auto flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
                   conv.id === activeId
-                    ? "bg-slate-800 text-slate-100"
-                    : "text-slate-500 hover:bg-slate-800/50 hover:text-slate-300"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100"
+                    : "text-slate-400 hover:bg-slate-200 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800/50 dark:hover:text-slate-300"
                 }`}
                 title={conv.title}
               >
@@ -50,10 +50,10 @@ export default function ChatSidebar({
               </button>
             ))}
           </div>
-          <div className="border-t border-slate-800 p-2">
+          <div className="border-t border-slate-200 p-2 dark:border-slate-800">
             <button
               onClick={onNew}
-              className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+              className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
               title="New Chat"
             >
               <MessageSquarePlus size={16} />
@@ -65,7 +65,7 @@ export default function ChatSidebar({
           {/* Conversation list */}
           <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
             {conversations.length === 0 && (
-              <p className="px-2 py-6 text-center text-xs text-slate-600">
+              <p className="px-2 py-6 text-center text-xs text-slate-400 dark:text-slate-600">
                 No conversations yet
               </p>
             )}
@@ -74,19 +74,19 @@ export default function ChatSidebar({
                 key={conv.id}
                 className={`group flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm cursor-pointer transition-all ${
                   conv.id === activeId
-                    ? "bg-slate-800 text-slate-100"
-                    : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-300"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100"
+                    : "text-slate-500 hover:bg-white/60 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-300"
                 }`}
                 onClick={() => onSelect(conv.id)}
               >
-                <MessageSquare size={14} className="shrink-0 text-slate-500" />
+                <MessageSquare size={14} className="shrink-0 text-slate-400 dark:text-slate-500" />
                 <span className="flex-1 truncate">{conv.title}</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete(conv.id);
                   }}
-                  className="shrink-0 rounded p-0.5 text-slate-600 opacity-0 transition-all hover:bg-slate-700 hover:text-red-400 group-hover:opacity-100"
+                  className="shrink-0 rounded p-0.5 text-slate-400 opacity-0 transition-all hover:bg-slate-200 hover:text-red-500 group-hover:opacity-100 dark:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-red-400"
                 >
                   <Trash2 size={12} />
                 </button>
@@ -95,10 +95,10 @@ export default function ChatSidebar({
           </div>
 
           {/* New chat button */}
-          <div className="border-t border-slate-800 p-3">
+          <div className="border-t border-slate-200 p-3 dark:border-slate-800">
             <button
               onClick={onNew}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-medium text-slate-300 transition-all hover:border-amber-500/40 hover:bg-slate-800 hover:text-slate-100"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-all hover:border-red-500/40 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-red-500/40 dark:hover:bg-slate-800 dark:hover:text-slate-100"
             >
               <MessageSquarePlus size={16} />
               New Chat

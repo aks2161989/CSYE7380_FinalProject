@@ -11,6 +11,18 @@ export async function sendMessage(question) {
   return res.json();
 }
 
+export async function fetchPortfolioPrices() {
+  const res = await fetch("/api/portfolio/prices");
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchInvestmentActivity() {
+  const res = await fetch("/api/portfolio/activity");
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
 // Stock data and backtest still use mock for now
 export async function getStockData(symbol) {
   await new Promise((r) => setTimeout(r, 300));

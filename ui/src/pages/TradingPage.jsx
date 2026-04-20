@@ -42,20 +42,20 @@ export default function TradingPage() {
       {/* Header + Tabs */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Trading & Analysis</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Trading & Analysis</h1>
           <p className="mt-1 text-sm text-slate-500">
             Analyze stocks and backtest trading strategies
           </p>
         </div>
-        <div className="flex rounded-lg border border-slate-800 bg-slate-900/60 p-1">
+        <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-900/60">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
               className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all ${
                 activeTab === id
-                  ? "bg-slate-800 text-amber-400 shadow"
-                  : "text-slate-400 hover:text-slate-200"
+                  ? "bg-white text-red-600 shadow-sm dark:bg-slate-800 dark:text-red-400 dark:shadow"
+                  : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
               <Icon size={14} />
@@ -90,7 +90,7 @@ export default function TradingPage() {
                   {backtestCurve && <EquityChart data={backtestCurve} />}
                 </>
               ) : (
-                <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-slate-700">
+                <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
                   <p className="text-sm text-slate-500">
                     Configure and run a backtest to see results
                   </p>

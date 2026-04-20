@@ -1,15 +1,18 @@
-import { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { Loader2, BarChart3, TrendingUp } from "lucide-react";
-import ChatMessage from "../components/chat/ChatMessage";
-import ChatInput from "../components/chat/ChatInput";
-import SampleQuestions from "../components/chat/SampleQuestions";
-import ChatSidebar from "../components/chat/ChatSidebar";
-import { sendMessage } from "../services/api";
+import { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { BarChart3, TrendingUp, Sun, Moon } from 'lucide-react';
+import warrenAvatar from '../assets/warren-avatar-sm.png';
+import warrenLogo from '../assets/warren-logo.png';
+import ChatMessage from '../components/chat/ChatMessage';
+import ChatInput from '../components/chat/ChatInput';
+import SampleQuestions from '../components/chat/SampleQuestions';
+import ChatSidebar from '../components/chat/ChatSidebar';
+import { useTheme } from '../context/ThemeContext';
+import { sendMessage } from '../services/api';
 
-const CONVERSATIONS_KEY = "buffett-conversations";
-const ACTIVE_KEY = "buffett-active-chat";
-const SIDEBAR_KEY = "buffett-sidebar-collapsed";
+const CONVERSATIONS_KEY = 'buffett-conversations';
+const ACTIVE_KEY = 'buffett-active-chat';
+const SIDEBAR_KEY = 'buffett-sidebar-collapsed';
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -40,20 +43,21 @@ function saveActiveId(id) {
 }
 
 function deriveTitle(messages) {
-  const first = messages.find((m) => m.role === "user");
-  if (!first) return "New Chat";
+  const first = messages.find((m) => m.role === 'user');
+  if (!first) return 'New Chat';
   return first.content.length > 40
-    ? first.content.slice(0, 40) + "..."
+    ? first.content.slice(0, 40) + '...'
     : first.content;
 }
 
 export default function ChatPage() {
+  const { dark, toggle } = useTheme();
   const [conversations, setConversations] = useState(loadConversations);
   const [activeId, setActiveId] = useState(loadActiveId);
   const [loading, setLoading] = useState(false);
   const [animatingIdx, setAnimatingIdx] = useState(null);
   const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem(SIDEBAR_KEY) === "true"
+    () => localStorage.getItem(SIDEBAR_KEY) === 'true',
   );
   const bottomRef = useRef(null);
 
@@ -69,7 +73,7 @@ export default function ChatPage() {
   }, [activeId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
   function toggleSidebar() {
@@ -81,7 +85,12 @@ export default function ChatPage() {
 
   function handleNew() {
     const id = generateId();
-    const newConv = { id, title: "New Chat", messages: [], createdAt: Date.now() };
+    const newConv = {
+      id,
+      title: 'New Chat',
+      messages: [],
+      createdAt: Date.now(),
+    };
     setConversations((prev) => [newConv, ...prev]);
     setActiveId(id);
     setAnimatingIdx(null);
@@ -103,20 +112,25 @@ export default function ChatPage() {
     let currentId = activeId;
     if (!currentId) {
       const id = generateId();
-      const newConv = { id, title: question.slice(0, 40), messages: [], createdAt: Date.now() };
+      const newConv = {
+        id,
+        title: question.slice(0, 40),
+        messages: [],
+        createdAt: Date.now(),
+      };
       setConversations((prev) => [newConv, ...prev]);
       setActiveId(id);
       currentId = id;
     }
 
-    const userMsg = { role: "user", content: question };
+    const userMsg = { role: 'user', content: question };
 
     setConversations((prev) =>
       prev.map((c) => {
         if (c.id !== currentId) return c;
         const newMsgs = [...c.messages, userMsg];
         return { ...c, messages: newMsgs, title: deriveTitle(newMsgs) };
-      })
+      }),
     );
 
     setLoading(true);
@@ -124,9 +138,10 @@ export default function ChatPage() {
     try {
       const result = await sendMessage(question);
       const assistantMsg = {
-        role: "assistant",
+        role: 'assistant',
         content: result.answer,
         sources: result.sources,
+        stock_data: result.stock_data,
       };
       setConversations((prev) =>
         prev.map((c) => {
@@ -134,19 +149,19 @@ export default function ChatPage() {
           const newMsgs = [...c.messages, assistantMsg];
           setAnimatingIdx(newMsgs.length - 1);
           return { ...c, messages: newMsgs, title: deriveTitle(newMsgs) };
-        })
+        }),
       );
     } catch {
       const errorMsg = {
-        role: "assistant",
+        role: 'assistant',
         content:
-          "Sorry, something went wrong. Make sure the FastAPI server is running (uvicorn server:app --port 8000).",
+          'Sorry, something went wrong. Make sure the FastAPI server is running (uvicorn server:app --port 8000).',
       };
       setConversations((prev) =>
         prev.map((c) => {
           if (c.id !== currentId) return c;
           return { ...c, messages: [...c.messages, errorMsg] };
-        })
+        }),
       );
     } finally {
       setLoading(false);
@@ -154,7 +169,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="fixed inset-0 flex">
+    <div className='fixed inset-0 flex bg-slate-50 dark:bg-[#0d1520]'>
       {/* Sidebar — full screen height */}
       <ChatSidebar
         conversations={conversations}
@@ -167,34 +182,49 @@ export default function ChatPage() {
       />
 
       {/* Main area — navbar + chat */}
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className='flex flex-1 flex-col min-w-0'>
         {/* Inline navbar for chat page */}
-        <nav className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-[#0a0e1a]/80 backdrop-blur-xl px-6">
-          <div className="flex items-center gap-3">
-            <Link to="/" className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 text-xs font-bold text-slate-950">
-              BH
+        <nav className='flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 backdrop-blur-xl px-6 dark:border-slate-800 dark:bg-[#0d1520]/80'>
+          <div className='flex items-center gap-2'>
+            <Link to='/' className='flex items-center gap-2'>
+              <img src={warrenLogo} alt="Warren" className='h-9 w-auto object-contain' />
             </Link>
-            <span className="text-base font-semibold text-slate-100">
-              Warren AI
-            </span>
+            <div>
+              <span className='block text-sm font-semibold text-slate-900 dark:text-slate-100'>
+                Warren likes Burger
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <Link to="/" className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200">
+          <div className='flex items-center gap-1'>
+            <Link
+              to='/'
+              className='flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
+            >
               <BarChart3 size={14} /> Portfolio
             </Link>
-            <Link to="/trading" className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200">
+            <Link
+              to='/trading'
+              className='flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
+            >
               <TrendingUp size={14} /> Trading
             </Link>
+            <button
+              onClick={toggle}
+              className='ml-1 flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
+              aria-label='Toggle theme'
+            >
+              {dark ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
           </div>
         </nav>
 
         {/* Chat content */}
-        <div className="flex flex-1 flex-col min-h-0">
+        <div className='flex flex-1 flex-col min-h-0'>
           {messages.length === 0 ? (
             <SampleQuestions onSelect={handleSend} />
           ) : (
-            <div className="flex-1 overflow-y-auto px-6 py-6">
-              <div className="mx-auto max-w-3xl space-y-6">
+            <div className='flex-1 overflow-y-auto px-6 py-6'>
+              <div className='mx-auto max-w-3xl space-y-6'>
                 {messages.map((msg, i) => (
                   <ChatMessage
                     key={i}
@@ -203,15 +233,19 @@ export default function ChatPage() {
                   />
                 ))}
                 {loading && (
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400">
-                      <Loader2 size={16} className="animate-spin" />
+                  <div className='flex items-center gap-3'>
+                    <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 overflow-hidden animate-pulse'>
+                      <img
+                        src={warrenAvatar}
+                        alt='Warren AI'
+                        className='h-7 w-7 object-contain'
+                      />
                     </div>
-                    <div className="rounded-2xl rounded-tl-sm bg-slate-800 px-4 py-3">
-                      <div className="flex gap-1">
-                        <span className="h-2 w-2 animate-bounce rounded-full bg-slate-500 [animation-delay:0ms]" />
-                        <span className="h-2 w-2 animate-bounce rounded-full bg-slate-500 [animation-delay:150ms]" />
-                        <span className="h-2 w-2 animate-bounce rounded-full bg-slate-500 [animation-delay:300ms]" />
+                    <div className='rounded-2xl rounded-tl-sm bg-slate-200 px-4 py-3 dark:bg-slate-800'>
+                      <div className='flex gap-1'>
+                        <span className='h-2 w-2 animate-bounce rounded-full bg-slate-400 dark:bg-slate-500 [animation-delay:0ms]' />
+                        <span className='h-2 w-2 animate-bounce rounded-full bg-slate-400 dark:bg-slate-500 [animation-delay:150ms]' />
+                        <span className='h-2 w-2 animate-bounce rounded-full bg-slate-400 dark:bg-slate-500 [animation-delay:300ms]' />
                       </div>
                     </div>
                   </div>

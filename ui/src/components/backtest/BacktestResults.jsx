@@ -13,7 +13,7 @@ export default function BacktestResults({ result }) {
   if (!result) return null;
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+    <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/60">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-medium uppercase tracking-wider text-slate-500">
           Results — {result.strategyName}
@@ -27,11 +27,11 @@ export default function BacktestResults({ result }) {
           const val = result[key];
           const isNeg = typeof val === "number" && val < 0;
           return (
-            <div key={key} className="rounded-lg bg-slate-800/40 px-3 py-3 text-center">
+            <div key={key} className="rounded-lg bg-slate-50 px-3 py-3 text-center dark:bg-slate-800/40">
               <p className="text-xs text-slate-500">{label}</p>
               <p className={`mt-1 text-lg font-bold ${
-                key === "maxDrawdown" ? "text-red-400"
-                : isNeg ? "text-red-400" : "text-emerald-400"
+                key === "maxDrawdown" ? "text-red-600 dark:text-red-400"
+                : isNeg ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
               }`}>
                 {format(val)}
               </p>

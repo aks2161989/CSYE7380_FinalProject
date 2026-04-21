@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { BarChart3, MessageSquare, TrendingUp, Sun, Moon } from "lucide-react";
+import { BarChart3, MessageSquare, TrendingUp, FlaskConical, Sun, Moon } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
 import warrenLogo from "../../assets/warren-logo.png";
 
@@ -7,6 +7,7 @@ const links = [
   { to: "/", label: "Portfolio", icon: BarChart3 },
   { to: "/chat", label: "Chat", icon: MessageSquare },
   { to: "/trading", label: "Trading", icon: TrendingUp },
+  { to: "/evaluation", label: "Evaluation", icon: FlaskConical },
 ];
 
 export default function Navbar() {

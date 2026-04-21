@@ -11,9 +11,12 @@ import pandas as pd
 import streamlit as st
 
 from config import APP_TITLE
-from rag_chain import ask, get_vectorstore, get_llm
+from rag_chain import ask, get_llm
+from retriever import get_vectorstore, get_reranker
 from stock_analysis import compute_ratios, passes_rule, fmt, RATIO_DEFINITIONS
 from trading_backtest import run_moving_average_crossover, run_rsi_strategy
+from evaluate import evaluate_retrieval, compare_chunk_sizes, TEST_SUITE
+from retriever import hybrid_search, retrieve
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title=APP_TITLE, page_icon="📈", layout="wide")
@@ -23,6 +26,7 @@ st.set_page_config(page_title=APP_TITLE, page_icon="📈", layout="wide")
 def load_models():
     get_vectorstore()
     get_llm()
+    get_reranker()
     return True
 
 
@@ -55,7 +59,7 @@ with st.sidebar:
     st.caption("Data: 1,010-page PDF + 5,992 Q&A pairs across 7 datasets.")
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
-tab_chat, tab_stocks = st.tabs(["💬 Chat Bot", "📊 Stock Analysis & Backtesting"])
+tab_chat, tab_stocks, tab_eval = st.tabs(["Chat Bot", "Stock Analysis & Backtesting", "RAG Evaluation"])
 
 
 # ═══════════════════════════ TAB 1: CHAT BOT ═════════════════════════════════
@@ -148,8 +152,10 @@ with tab_chat:
 
         with st.chat_message("assistant"):
             is_stock = any(kw in question.lower() for kw in ["stock", "think", "invest", "buy", "sell"])
+            # Pass conversation history for follow-up support
+            history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
             with st.spinner("Analyzing..." if is_stock else "Thinking..."):
-                result = ask(question)
+                result = ask(question, history=history)
             if result.get("stock_data"):
                 display_stock_card(result["stock_data"])
             st.write(result["answer"])
@@ -423,3 +429,149 @@ with tab_stocks:
                 display_trades["Exit_Price"] = display_trades["Exit_Price"].round(2)
                 display_trades["PnL"] = display_trades["PnL"].map(lambda x: f"{x:.2%}")
                 st.dataframe(display_trades, hide_index=True, use_container_width=True)
+
+
+# ══════════════════════ TAB 3: RAG EVALUATION ════════════════════════════════
+with tab_eval:
+    st.title("RAG Evaluation Dashboard")
+    st.caption(
+        "Benchmarks retrieval quality across search methods and chunking strategies. "
+        "Shows why hybrid search + reranking outperforms FAISS alone."
+    )
+
+    # ── Section 1: Search Method Comparison ──────────────────────────────────
+    st.subheader("Search Method Comparison")
+    st.write(
+        "Compares three retrieval approaches on a suite of "
+        f"**{len(TEST_SUITE)} test questions** ranging from easy keyword matches "
+        "to paraphrased and adversarial queries."
+    )
+
+    if st.button("Run Search Evaluation", type="primary", key="run_search_eval"):
+        vs = get_vectorstore()
+
+        methods = {
+            "FAISS Only": lambda q, k: vs.similarity_search(q, k=k),
+            "Hybrid (BM25 + FAISS)": lambda q, k: hybrid_search(q, k=k),
+            "Hybrid + Reranking": lambda q, k: retrieve(q, k_retrieve=10, k_final=k),
+        }
+
+        all_metrics = {}
+        all_details = {}
+        progress = st.progress(0, text="Evaluating...")
+
+        for i, (name, fn) in enumerate(methods.items()):
+            progress.progress((i) / len(methods), text=f"Testing: {name}...")
+            metrics, details = evaluate_retrieval(fn)
+            all_metrics[name] = metrics
+            all_details[name] = details
+
+        progress.progress(1.0, text="Done!")
+        st.session_state.search_metrics = all_metrics
+        st.session_state.search_details = all_details
+
+    if "search_metrics" in st.session_state:
+        metrics = st.session_state.search_metrics
+
+        # Summary metrics
+        cols = st.columns(len(metrics))
+        for col, (name, m) in zip(cols, metrics.items()):
+            with col:
+                st.markdown(f"**{name}**")
+                st.metric("Source Hit Rate", f"{m['source_hit_rate']:.0%}")
+                st.metric("Keyword Hit Rate", f"{m['keyword_hit_rate']:.0%}")
+                st.metric("MRR", f"{m['mrr']:.3f}")
+
+        # Bar chart comparison
+        chart_data = pd.DataFrame({
+            name: {
+                "Source Hit Rate": m["source_hit_rate"] * 100,
+                "Keyword Hit Rate": m["keyword_hit_rate"] * 100,
+                "MRR": m["mrr"] * 100,
+            }
+            for name, m in metrics.items()
+        }).T
+        st.bar_chart(chart_data, height=300)
+
+        # Detailed results per question
+        if "search_details" in st.session_state:
+            with st.expander("Detailed Results Per Question"):
+                best_method = "Hybrid + Reranking"
+                details = st.session_state.search_details.get(best_method, [])
+                rows = []
+                for d in details:
+                    rows.append({
+                        "Question": d["question"][:60] + "..." if len(d["question"]) > 60 else d["question"],
+                        "Source Hit": "Pass" if d["source_hit"] else "Fail",
+                        "Keyword Hit": "Pass" if d["keyword_hit"] else "Fail",
+                        "MRR": f"{d['mrr']:.2f}",
+                        "Top Sources": ", ".join(d["top_sources"]),
+                        "Keywords Found": ", ".join(d["keywords_found"][:3]),
+                        "Keywords Missed": ", ".join(d["keywords_missed"][:3]),
+                    })
+                st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+    st.divider()
+
+    # ── Section 2: Chunking Strategy Comparison ──────────────────────────────
+    st.subheader("Chunking Strategy Comparison")
+    st.write(
+        "Tests 5 different chunk size / overlap configurations to find the optimal "
+        "balance between context granularity and retrieval quality."
+    )
+
+    if st.button("Run Chunking Evaluation", type="primary", key="run_chunk_eval"):
+        with st.spinner("Building temporary indexes and evaluating (this takes ~2 minutes)..."):
+            chunk_metrics = compare_chunk_sizes()
+            st.session_state.chunk_metrics = chunk_metrics
+
+    if "chunk_metrics" in st.session_state:
+        chunk_m = st.session_state.chunk_metrics
+
+        rows = []
+        for label, m in chunk_m.items():
+            is_current = "current" in label
+            rows.append({
+                "Chunk Config": label,
+                "PDF Chunks": m["num_pdf_chunks"],
+                "Total Docs": m["num_documents"],
+                "Source Hit Rate": f"{m['source_hit_rate']:.0%}",
+                "Keyword Hit Rate": f"{m['keyword_hit_rate']:.0%}",
+                "MRR": f"{m['mrr']:.3f}",
+            })
+
+        df_chunks = pd.DataFrame(rows)
+        st.dataframe(df_chunks, hide_index=True, use_container_width=True)
+
+        # Chart
+        chart_rows = {
+            label: {
+                "Keyword Hit Rate": m["keyword_hit_rate"] * 100,
+                "MRR": m["mrr"] * 100,
+            }
+            for label, m in chunk_m.items()
+        }
+        st.bar_chart(pd.DataFrame(chart_rows).T, height=300)
+
+        # Insight
+        best_kw = max(chunk_m.items(), key=lambda x: x[1]["keyword_hit_rate"])
+        st.success(
+            f"Best chunking strategy: **{best_kw[0]}** with "
+            f"{best_kw[1]['keyword_hit_rate']:.0%} keyword hit rate and "
+            f"{best_kw[1]['mrr']:.3f} MRR."
+        )
+
+    st.divider()
+
+    # ── Section 3: Test Suite ────────────────────────────────────────────────
+    st.subheader("Test Suite")
+    st.write(f"The evaluation uses **{len(TEST_SUITE)} benchmark questions** across difficulty levels:")
+
+    rows = []
+    for t in TEST_SUITE:
+        rows.append({
+            "Question": t["question"],
+            "Expected Source": t["expected_source"],
+            "Expected Keywords": ", ".join(t["expected_keywords"][:4]),
+        })
+    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)

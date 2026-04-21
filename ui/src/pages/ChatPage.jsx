@@ -136,7 +136,9 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
-      const result = await sendMessage(question);
+      const currentConv = conversations.find((c) => c.id === currentId);
+      const history = (currentConv?.messages || []).map(({ role, content }) => ({ role, content }));
+      const result = await sendMessage(question, history);
       const assistantMsg = {
         role: 'assistant',
         content: result.answer,

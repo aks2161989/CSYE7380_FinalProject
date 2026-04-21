@@ -18,8 +18,14 @@ app.add_middleware(
 )
 
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
 class QuestionRequest(BaseModel):
     question: str
+    history: list[ChatMessage] = []
 
 
 PORTFOLIO_TICKERS = ["AAPL", "BAC", "AXP", "KO", "CVX", "OXY", "KHC", "MCO", "DVA", "VRSN"]
@@ -251,4 +257,46 @@ def buffett_analysis(req: BuffettAnalysisRequest):
 def chat(req: QuestionRequest):
     from rag_chain import ask
 
-    return ask(req.question)
+    history = [{"role": m.role, "content": m.content} for m in req.history]
+    return ask(req.question, history=history)
+
+
+@app.get("/api/evaluation/search-methods")
+def eval_search_methods():
+    """Run evaluation comparing FAISS-only, Hybrid, and Hybrid+Reranking."""
+    from evaluate import evaluate_retrieval, TEST_SUITE
+    from retriever import get_vectorstore, hybrid_search, retrieve
+
+    vs = get_vectorstore()
+
+    methods = {
+        "FAISS Only": lambda q, k: vs.similarity_search(q, k=k),
+        "Hybrid (BM25 + FAISS)": lambda q, k: hybrid_search(q, k=k),
+        "Hybrid + Reranking": lambda q, k: retrieve(q, k_retrieve=10, k_final=k),
+    }
+
+    results = {}
+    for name, fn in methods.items():
+        metrics, details = evaluate_retrieval(fn)
+        results[name] = {
+            "metrics": metrics,
+            "details": details,
+        }
+
+    return results
+
+
+@app.get("/api/evaluation/chunk-sizes")
+def eval_chunk_sizes():
+    """Run evaluation comparing different chunking strategies."""
+    from evaluate import compare_chunk_sizes
+
+    return compare_chunk_sizes()
+
+
+@app.get("/api/evaluation/test-suite")
+def eval_test_suite():
+    """Return the test suite used for evaluation."""
+    from evaluate import TEST_SUITE
+
+    return TEST_SUITE

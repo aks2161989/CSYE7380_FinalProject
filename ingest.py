@@ -21,6 +21,7 @@ from config import (
     PDF_PATH, CSV_FILES, VECTORSTORE_DIR,
     CHUNK_SIZE, CHUNK_OVERLAP, EMBEDDING_MODEL,
 )
+from retriever import build_bm25_index
 
 
 def load_pdf():
@@ -102,6 +103,9 @@ def main():
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
     vectorstore = FAISS.from_documents(all_docs, embeddings)
     vectorstore.save_local(VECTORSTORE_DIR)
+
+    print("Building BM25 keyword index...")
+    build_bm25_index(all_docs)
 
     elapsed = time.time() - start
     print(f"\nVector store saved to {VECTORSTORE_DIR}/")

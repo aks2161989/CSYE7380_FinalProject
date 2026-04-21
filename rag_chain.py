@@ -1,38 +1,28 @@
 """
 rag_chain.py -- RAG retrieval and generation pipeline.
 
-Loads the FAISS vector store, retrieves relevant chunks for a user question,
-and generates an answer using FLAN-T5 (local) or Groq Llama 3 (if API key is set).
+Features:
+- Hybrid search (BM25 + FAISS) with cross-encoder reranking
+- Conversation memory for follow-up questions
+- Stock analysis with live data + backtesting
+- FLAN-T5 (local) or Groq Llama 3 generation
 """
 
 import os
 
 from dotenv import load_dotenv
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 from config import VECTORSTORE_DIR, EMBEDDING_MODEL, LOCAL_MODEL, GROQ_MODEL, TOP_K
+from retriever import retrieve, get_vectorstore, get_reranker
 from stock_analysis import is_stock_query, extract_ticker, fetch_stock_data, format_stock_summary
 
 load_dotenv()
 
-# Module-level singletons (loaded once, reused across calls)
-_vectorstore = None
+# Module-level singletons
 _model = None
 _tokenizer = None
 _groq_client = None
-
-
-def get_vectorstore():
-    """Load the FAISS vector store (cached after first call)."""
-    global _vectorstore
-    if _vectorstore is None:
-        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-        _vectorstore = FAISS.load_local(
-            VECTORSTORE_DIR, embeddings, allow_dangerous_deserialization=True
-        )
-    return _vectorstore
 
 
 def get_llm():
@@ -66,17 +56,35 @@ def build_context(docs):
     return "\n\n".join(context_parts)
 
 
-def build_groq_prompt(question, context):
-    """Build the detailed prompt for Groq Llama 3 (from teammate's rag_chat.py)."""
+def format_chat_history(history):
+    """Format conversation history for the prompt."""
+    if not history:
+        return ""
+    lines = []
+    for msg in history[-4:]:  # last 4 messages (2 turns)
+        role = "User" if msg["role"] == "user" else "Assistant"
+        lines.append(f"{role}: {msg['content']}")
+    return "\n".join(lines)
+
+
+def build_groq_prompt(question, context, chat_history=""):
+    """Build the detailed prompt for Groq."""
+    history_block = ""
+    if chat_history:
+        history_block = f"""
+Previous conversation:
+{chat_history}
+
+"""
     return f"""You are a Warren Buffett trader/investor chatbot built from team-prepared study material.
 Answer the user's question using ONLY the retrieved context below.
-
-Rules:
+{history_block}Rules:
 - Do not mention "Context 1", "Context 2", or similar references.
 - Do not say "according to the context".
 - Give a direct, natural answer.
 - Prefer 2-4 sentences.
 - Be specific when the dataset supports specifics.
+- If this is a follow-up question, use the conversation history to understand what the user is referring to.
 - If the question asks how Buffett adapted or evolved, prioritize concrete historical changes in his strategy (e.g., shift from buying cheap stocks to high-quality businesses) if present in the context.
 - Avoid vague summaries like "he learned from experience" unless no more specific answer is available.
 - If the answer is not clearly supported by the retrieved material, say:
@@ -138,11 +146,15 @@ def build_local_prompt(question, context):
     )
 
 
-def ask(question):
+def ask(question, history=None):
     """
     Retrieve relevant chunks and generate an answer.
-    If the question is about a specific stock, fetch real market data
-    and analyze it through Buffett's investment principles.
+    Uses hybrid search (BM25 + FAISS) with cross-encoder reranking.
+    Supports conversation memory via the history parameter.
+
+    Args:
+        question: The user's question
+        history: List of {"role": "user"|"assistant", "content": str} dicts
 
     Returns:
         dict with keys:
@@ -150,7 +162,6 @@ def ask(question):
             - "sources": list of dicts with "content", "source", "page" keys
             - "stock_data": dict of stock metrics (only if stock query)
     """
-    vectorstore = get_vectorstore()
     model, tokenizer, groq_client = get_llm()
 
     # Check if this is a stock analysis query
@@ -163,21 +174,30 @@ def ask(question):
             if stock_data:
                 stock_summary = format_stock_summary(stock_data)
 
-    # Retrieve Buffett's principles -- use investment-focused search for stock queries
+    # Retrieve with hybrid search + reranking
     if stock_data:
         search_query = "investment criteria value investing margin of safety return on equity"
-        docs = vectorstore.similarity_search(search_query, k=TOP_K)
     else:
-        docs = vectorstore.similarity_search(question, k=TOP_K)
+        # For follow-ups, enrich the query with context from history
+        search_query = question
+        if history:
+            last_assistant = [m for m in history if m["role"] == "assistant"]
+            if last_assistant and len(question.split()) < 8:
+                # Short question likely a follow-up, add context
+                search_query = f"{last_assistant[-1]['content'][:200]} {question}"
 
+    docs = retrieve(search_query, k_retrieve=10, k_final=TOP_K)
     context = build_context(docs)
+
+    # Format chat history for conversation memory
+    chat_history = format_chat_history(history) if history else ""
 
     # Generate answer
     if groq_client is not None:
         if stock_data and stock_summary:
             prompt = build_stock_groq_prompt(question, context, stock_summary)
         else:
-            prompt = build_groq_prompt(question, context)
+            prompt = build_groq_prompt(question, context, chat_history)
         response = groq_client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],

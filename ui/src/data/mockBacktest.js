@@ -1,7 +1,6 @@
 export const strategies = [
-  { id: "ma_crossover", name: "Moving Average Crossover", description: "Buy when short MA crosses above long MA, sell on cross below" },
-  { id: "rsi", name: "RSI Mean Reversion", description: "Buy when RSI < oversold threshold, sell when RSI > overbought" },
-  { id: "bollinger", name: "Bollinger Bands", description: "Buy at lower band, sell at upper band" },
+  { id: "ma_crossover", name: "Moving Average Crossover", description: "Buy when SMA 20 crosses above SMA 50, sell on cross below" },
+  { id: "rsi", name: "RSI Mean Reversion", description: "Buy when RSI < 30 (oversold), sell when RSI > 70 (overbought)" },
 ];
 
 export const mockBacktestResult = {

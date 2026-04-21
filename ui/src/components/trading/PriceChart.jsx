@@ -1,5 +1,5 @@
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { useTheme } from "../../context/ThemeContext";
 
@@ -17,10 +17,45 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
-export default function PriceChart({ data }) {
+function makeCandlestickShape(domMin, domMax) {
+  return function CandlestickShape(props) {
+    const { x, y, width, height, payload } = props;
+    if (!payload || height == null) return null;
+
+    const { open, high, low, close } = payload;
+    const color = close >= open ? "#10b981" : "#ef4444";
+
+    // Derive pixel scale from the bar's own y/height + known domain
+    const plotHeight = height * (domMax - domMin) / (close - domMin);
+    const plotTop = y - (domMax - close) * height / (close - domMin);
+    const scale = (v) => plotTop + ((domMax - v) / (domMax - domMin)) * plotHeight;
+
+    const cx = x + width / 2;
+    const bodyTop = Math.min(scale(open), scale(close));
+    const bodyH = Math.max(Math.abs(scale(close) - scale(open)), 1);
+
+    return (
+      <g>
+        <line x1={cx} y1={scale(high)} x2={cx} y2={scale(low)} stroke={color} strokeWidth={1} />
+        <rect x={x + 1} y={bodyTop} width={Math.max(width - 2, 1)} height={bodyH} fill={color} />
+      </g>
+    );
+  };
+}
+
+export default function PriceChart({ data, loading }) {
   const { dark } = useTheme();
   const gridStroke = dark ? "#1e293b" : "#e2e8f0";
   const tickFill = dark ? "#64748b" : "#94a3b8";
+
+  const allPrices = data.flatMap((d) => [d.high, d.low]);
+  const minPrice = Math.min(...allPrices);
+  const maxPrice = Math.max(...allPrices);
+  const pad = (maxPrice - minPrice) * 0.05;
+  const domMin = minPrice - pad;
+  const domMax = maxPrice + pad;
+
+  const CandlestickShape = makeCandlestickShape(domMin, domMax);
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/60">
@@ -28,14 +63,18 @@ export default function PriceChart({ data }) {
         Price History
       </h3>
       <div className="h-72">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data}>
-            <defs>
-              <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#ef4444" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
-              </linearGradient>
-            </defs>
+        {loading && (
+          <div className="flex h-full items-center justify-center">
+            <p className="text-sm text-slate-400">Loading price data...</p>
+          </div>
+        )}
+        {!loading && data.length === 0 && (
+          <div className="flex h-full items-center justify-center">
+            <p className="text-sm text-slate-400">No data available</p>
+          </div>
+        )}
+        {!loading && data.length > 0 && <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
             <XAxis
               dataKey="date"
@@ -49,19 +88,17 @@ export default function PriceChart({ data }) {
               tick={{ fill: tickFill, fontSize: 11 }}
               tickLine={false}
               axisLine={false}
-              domain={["auto", "auto"]}
-              tickFormatter={(v) => `$${v}`}
+              domain={[domMin, domMax]}
+              tickFormatter={(v) => `$${v.toFixed(0)}`}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Area
-              type="monotone"
+            <Bar
               dataKey="close"
-              stroke="#ef4444"
-              strokeWidth={2}
-              fill="url(#priceGrad)"
+              shape={<CandlestickShape />}
+              isAnimationActive={false}
             />
-          </AreaChart>
-        </ResponsiveContainer>
+          </ComposedChart>
+        </ResponsiveContainer>}
       </div>
     </div>
   );

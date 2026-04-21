@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
-import { LineChart, FlaskConical, Sparkles, Loader2 } from "lucide-react";
+import { LineChart, FlaskConical, Sparkles } from "lucide-react";
 import StockSelector from "../components/trading/StockSelector";
 import PriceChart from "../components/trading/PriceChart";
 import FundamentalsPanel from "../components/trading/FundamentalsPanel";
 import BacktestForm from "../components/backtest/BacktestForm";
 import BacktestResults from "../components/backtest/BacktestResults";
 import EquityChart from "../components/backtest/EquityChart";
+import SignalChart from "../components/backtest/SignalChart";
 import TradesTable from "../components/backtest/TradesTable";
 import TradeLikeBuffett from "../components/buffett/TradelikBuffett";
-import { fetchStockPrices, fetchStockFundamentals, runBacktest } from "../services/api";
+import { runBacktest, getStockPrices, getStockFundamentals, getBacktestBuffettTake } from "../services/api";
 
 const tabs = [
   { id: "buffett", label: "Trade like Buffett", icon: Sparkles },
@@ -19,57 +20,67 @@ const tabs = [
 export default function TradingPage() {
   const [activeTab, setActiveTab] = useState("buffett");
   const [selectedSymbol, setSelectedSymbol] = useState("AAPL");
-
-  // Live stock data
   const [priceData, setPriceData] = useState([]);
+  const [priceLoading, setPriceLoading] = useState(false);
+  const [period, setPeriod] = useState("6mo");
   const [fundamentals, setFundamentals] = useState(null);
-  const [stockLoading, setStockLoading] = useState(false);
+  const [fundamentalsLoading, setFundamentalsLoading] = useState(false);
+  const [backtestPriceData, setBacktestPriceData] = useState(null);
+
+  useEffect(() => {
+    setPriceLoading(true);
+    getStockPrices(selectedSymbol, period)
+      .then(setPriceData)
+      .catch(() => setPriceData([]))
+      .finally(() => setPriceLoading(false));
+  }, [selectedSymbol, period]);
+
+  useEffect(() => {
+    setFundamentalsLoading(true);
+    setFundamentals(null);
+    getStockFundamentals(selectedSymbol)
+      .then(setFundamentals)
+      .catch(() => setFundamentals(null))
+      .finally(() => setFundamentalsLoading(false));
+  }, [selectedSymbol]);
 
   // Backtest state
-  const [backtestResults, setBacktestResults] = useState(null);
+  const [backtestResult, setBacktestResult] = useState(null);
+  const [backtestCurve, setBacktestCurve] = useState(null);
+  const [backtestTrades, setBacktestTrades] = useState(null);
   const [backtestLoading, setBacktestLoading] = useState(false);
-  const [activeStrategy, setActiveStrategy] = useState("ma");
+  const [backtestTake, setBacktestTake] = useState(null);
+  const [backtestTakeLoading, setBacktestTakeLoading] = useState(false);
 
-  // Fetch live price + fundamentals when symbol changes
-  useEffect(() => {
-    if (activeTab !== "trading") return;
-    setStockLoading(true);
-    Promise.all([
-      fetchStockPrices(selectedSymbol).catch(() => []),
-      fetchStockFundamentals(selectedSymbol).catch(() => null),
-    ]).then(([prices, fund]) => {
-      if (Array.isArray(prices)) setPriceData(prices);
-      if (fund && !fund.error) {
-        setFundamentals({
-          symbol: fund.ticker,
-          name: fund.name,
-          price: fund.current_price,
-          marketCap: fund.market_cap >= 1e12 ? `$${(fund.market_cap / 1e12).toFixed(1)}T` : `$${(fund.market_cap / 1e9).toFixed(1)}B`,
-          peRatio: fund.trailing_pe,
-          eps: fund.current_price && fund.trailing_pe ? fund.current_price / fund.trailing_pe : null,
-          dividendYield: fund.dividend_yield ? `${(fund.dividend_yield * 100).toFixed(2)}%` : "0.00%",
-          week52High: fund["52w_high"],
-          week52Low: fund["52w_low"],
-          avgVolume: "N/A",
-          beta: null,
-        });
-      }
-    }).finally(() => setStockLoading(false));
-  }, [selectedSymbol, activeTab]);
-
-  async function handleBacktest({ symbol }) {
+  async function handleBacktest({ symbol, strategy, startDate, endDate, shortWindow, longWindow, rsiPeriod, oversold, overbought }) {
     setBacktestLoading(true);
+    setBacktestTake(null);
+    setBacktestTakeLoading(true);
     try {
-      const data = await runBacktest(symbol);
-      setBacktestResults(data);
-      if (data.ma) setActiveStrategy("ma");
-      else if (data.rsi) setActiveStrategy("rsi");
+      const data = await runBacktest(symbol, strategy, { startDate, endDate, shortWindow, longWindow, rsiPeriod, oversold, overbought });
+      setBacktestResult(data.result);
+      setBacktestCurve(data.equityCurve);
+      setBacktestTrades(data.trades);
+      setBacktestPriceData(data.priceData || null);
+      try {
+        const take = await getBacktestBuffettTake({
+          symbol: data.result.symbol,
+          strategyName: data.result.strategyName,
+          totalReturn: data.result.totalReturn,
+          sharpeRatio: data.result.sharpeRatio,
+          maxDrawdown: data.result.maxDrawdown,
+          winRate: data.result.winRate,
+          numTrades: data.result.numTrades,
+        });
+        setBacktestTake(take.answer);
+      } catch (err) {
+        setBacktestTake(`Error: ${err.message}`);
+      }
     } finally {
       setBacktestLoading(false);
+      setBacktestTakeLoading(false);
     }
   }
-
-  const currentBacktest = backtestResults?.[activeStrategy];
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 space-y-6">
@@ -105,68 +116,68 @@ export default function TradingPage() {
       {/* Stock Trading Tab */}
       {activeTab === "trading" && (
         <div className="space-y-6">
-          <div className="max-w-xs">
-            <StockSelector selected={selectedSymbol} onSelect={setSelectedSymbol} />
-          </div>
-          {stockLoading ? (
-            <div className="flex items-center justify-center gap-2 py-16">
-              <Loader2 size={24} className="animate-spin text-red-500" />
-              <span className="text-sm text-slate-500">Fetching live data...</span>
+          <div className="flex items-center justify-between">
+            <div className="max-w-xs">
+              <StockSelector selected={selectedSymbol} onSelect={setSelectedSymbol} />
             </div>
-          ) : (
-            <>
-              <PriceChart data={priceData} />
-              <FundamentalsPanel data={fundamentals} />
-            </>
-          )}
+            <div className="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-900/60">
+              {["1mo","3mo","6mo","1y"].map((p, i) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  className={`rounded px-3 py-1.5 text-xs font-medium transition-all ${
+                    period === p
+                      ? "bg-white text-red-600 shadow-sm dark:bg-slate-800 dark:text-red-400"
+                      : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                  }`}
+                >
+                  {["1M","3M","6M","1Y"][i]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <PriceChart data={priceData} loading={priceLoading} />
+          <FundamentalsPanel data={fundamentals} loading={fundamentalsLoading} />
         </div>
       )}
 
       {/* Backtesting Tab */}
       {activeTab === "backtest" && (
         <div className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-1">
+          <div className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
+            <div className="lg:col-span-1 flex flex-col gap-4">
               <BacktestForm onRun={handleBacktest} loading={backtestLoading} />
+              {backtestResult && (
+                <div className="flex-1 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/60 flex flex-col">
+                  <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                    <Sparkles size={12} /> What Would Warren Buffett Say?
+                  </h3>
+                  {backtestTakeLoading ? (
+                    <p className="text-xs text-slate-400 italic">Analysing results...</p>
+                  ) : backtestTake ? (() => {
+                    const r = backtestResult;
+                    const good = r.totalReturn > 0 && r.sharpeRatio > 1 && r.winRate > 0.5;
+                    const bad = r.totalReturn < 0 || r.sharpeRatio < 0.5;
+                    const colors = good
+                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300"
+                      : bad
+                      ? "bg-red-500/10 border-red-500/20 text-red-800 dark:text-red-300"
+                      : "bg-amber-500/10 border-amber-500/20 text-amber-800 dark:text-amber-300";
+                    return (
+                      <div className={`rounded-lg border px-3 py-2 flex-1 overflow-y-auto ${colors}`}>
+                        <p className="text-xs leading-relaxed">{backtestTake}</p>
+                      </div>
+                    );
+                  })() : null}
+                </div>
+              )}
             </div>
             <div className="lg:col-span-2 space-y-6">
-              {backtestResults ? (
+              {backtestResult ? (
                 <>
-                  {/* Strategy toggle */}
-                  <div className="flex gap-2">
-                    {backtestResults.ma && (
-                      <button
-                        onClick={() => setActiveStrategy("ma")}
-                        className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-                          activeStrategy === "ma"
-                            ? "bg-red-500 text-slate-950"
-                            : "border border-slate-200 text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400"
-                        }`}
-                      >
-                        MA Crossover
-                      </button>
-                    )}
-                    {backtestResults.rsi && (
-                      <button
-                        onClick={() => setActiveStrategy("rsi")}
-                        className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-                          activeStrategy === "rsi"
-                            ? "bg-red-500 text-slate-950"
-                            : "border border-slate-200 text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400"
-                        }`}
-                      >
-                        RSI Strategy
-                      </button>
-                    )}
-                  </div>
-                  {currentBacktest && (
-                    <>
-                      <BacktestResults result={currentBacktest.result} />
-                      {currentBacktest.equityCurve && (
-                        <EquityChart data={currentBacktest.equityCurve} />
-                      )}
-                    </>
-                  )}
+                  <BacktestResults result={backtestResult} />
+                  {backtestPriceData && <SignalChart priceData={backtestPriceData} trades={backtestTrades} />}
+                  {backtestCurve && <EquityChart data={backtestCurve} />}
                 </>
               ) : (
                 <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
@@ -177,9 +188,7 @@ export default function TradingPage() {
               )}
             </div>
           </div>
-          {currentBacktest?.trades?.length > 0 && (
-            <TradesTable trades={currentBacktest.trades} />
-          )}
+          {backtestTrades && <TradesTable trades={backtestTrades} />}
         </div>
       )}
     </div>

@@ -1,13 +1,13 @@
 const metrics = [
-  { key: "price", label: "Price", format: (v) => `$${v.toFixed(2)}` },
-  { key: "marketCap", label: "Market Cap" },
-  { key: "peRatio", label: "P/E Ratio", format: (v) => v.toFixed(1) },
-  { key: "eps", label: "EPS", format: (v) => `$${v.toFixed(2)}` },
-  { key: "dividendYield", label: "Div. Yield" },
-  { key: "week52High", label: "52W High", format: (v) => `$${v.toFixed(2)}` },
-  { key: "week52Low", label: "52W Low", format: (v) => `$${v.toFixed(2)}` },
-  { key: "avgVolume", label: "Avg Volume" },
-  { key: "beta", label: "Beta", format: (v) => v.toFixed(2) },
+  { key: "price", label: "Price", format: (v) => v != null ? `$${v.toFixed(2)}` : "N/A" },
+  { key: "marketCap", label: "Market Cap", format: (v) => v ?? "N/A" },
+  { key: "peRatio", label: "P/E Ratio", format: (v) => v != null ? v.toFixed(1) : "N/A" },
+  { key: "eps", label: "EPS", format: (v) => v != null ? `$${v.toFixed(2)}` : "N/A" },
+  { key: "dividendYield", label: "Div. Yield", format: (v) => v ?? "N/A" },
+  { key: "week52High", label: "52W High", format: (v) => v != null ? `$${v.toFixed(2)}` : "N/A" },
+  { key: "week52Low", label: "52W Low", format: (v) => v != null ? `$${v.toFixed(2)}` : "N/A" },
+  { key: "avgVolume", label: "Avg Volume", format: (v) => v ?? "N/A" },
+  { key: "beta", label: "Beta", format: (v) => v != null ? v.toFixed(2) : "N/A" },
 ];
 
 export default function FundamentalsPanel({ data }) {
@@ -23,7 +23,7 @@ export default function FundamentalsPanel({ data }) {
           <div key={key} className="rounded-lg bg-slate-50 px-3 py-3 dark:bg-slate-800/40">
             <p className="text-xs text-slate-500">{label}</p>
             <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200">
-              {format ? format(data[key]) : data[key]}
+              {format(data[key])}
             </p>
           </div>
         ))}

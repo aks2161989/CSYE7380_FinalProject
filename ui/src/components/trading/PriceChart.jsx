@@ -32,8 +32,8 @@ export default function PriceChart({ data }) {
           <AreaChart data={data}>
             <defs>
               <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
+                <stop offset="0%" stopColor="#ef4444" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -56,7 +56,7 @@ export default function PriceChart({ data }) {
             <Area
               type="monotone"
               dataKey="close"
-              stroke="#f59e0b"
+              stroke="#ef4444"
               strokeWidth={2}
               fill="url(#priceGrad)"
             />

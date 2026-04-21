@@ -1,6 +1,3 @@
-import { mockPriceDataBySymbol, mockFundamentals } from "../data/mockStockData";
-import { mockBacktestResult, mockEquityCurve, mockTrades } from "../data/mockBacktest";
-
 export async function sendMessage(question) {
   const res = await fetch("/api/chat", {
     method: "POST",
@@ -23,20 +20,34 @@ export async function fetchInvestmentActivity() {
   return res.json();
 }
 
-// Stock data and backtest still use mock for now
-export async function getStockData(symbol) {
-  await new Promise((r) => setTimeout(r, 300));
-  return {
-    prices: mockPriceDataBySymbol[symbol] || mockPriceDataBySymbol["AAPL"],
-    fundamentals: mockFundamentals[symbol] || mockFundamentals["AAPL"],
-  };
+export async function fetchStockPrices(symbol) {
+  const res = await fetch(`/api/stock/prices/${symbol}`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
 }
 
-export async function runBacktest(symbol, strategy, params) {
-  await new Promise((r) => setTimeout(r, 1200));
-  return {
-    result: { ...mockBacktestResult, symbol, strategyName: strategy },
-    equityCurve: mockEquityCurve,
-    trades: mockTrades,
-  };
+export async function fetchStockFundamentals(symbol) {
+  const res = await fetch(`/api/stock/fundamentals/${symbol}`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function runBacktest(symbol) {
+  const res = await fetch("/api/stock/backtest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ symbol }),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchBuffettAnalysis(symbol) {
+  const res = await fetch("/api/stock/buffett-analysis", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ symbol }),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
 }

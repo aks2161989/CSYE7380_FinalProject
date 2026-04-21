@@ -24,12 +24,12 @@ export default function TradesTable({ trades }) {
             </tr>
           </thead>
           <tbody>
-            {trades.map((t) => (
-              <tr key={t.id} className="border-b border-slate-100 hover:bg-slate-50 dark:border-slate-800/50 dark:hover:bg-slate-800/30">
-                <td className="px-6 py-3 text-slate-400 dark:text-slate-500">{t.id}</td>
+            {trades.map((t, idx) => (
+              <tr key={t.id ?? idx} className="border-b border-slate-100 hover:bg-slate-50 dark:border-slate-800/50 dark:hover:bg-slate-800/30">
+                <td className="px-6 py-3 text-slate-400 dark:text-slate-500">{t.id ?? idx + 1}</td>
                 <td className="px-6 py-3">
                   <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
-                    {t.type}
+                    {t.type ?? "LONG"}
                   </span>
                 </td>
                 <td className="px-6 py-3 text-slate-700 dark:text-slate-300">{t.entryDate}</td>

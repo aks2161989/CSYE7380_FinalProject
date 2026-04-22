@@ -63,7 +63,7 @@ export default function ChatSidebar({
       ) : (
         <>
           {/* Conversation list */}
-          <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
+          <div className="flex-1 overflow-y-auto px-2 pt-10 pb-2 space-y-0.5">
             {conversations.length === 0 && (
               <p className="px-2 py-6 text-center text-xs text-slate-400 dark:text-slate-600">
                 No conversations yet

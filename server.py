@@ -6,6 +6,7 @@ Run with:  uvicorn server:app --reload --port 8000
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 from pydantic import BaseModel
 
 app = FastAPI(title="Buffett RAG API")
@@ -281,7 +282,7 @@ class BacktestRequest(BaseModel):
     symbol: str
     strategy: str
     startDate: str = "2018-01-01"
-    endDate: str | None = None
+    endDate: Optional[str] = None
     shortWindow: int = 20
     longWindow: int = 50
     rsiPeriod: int = 14

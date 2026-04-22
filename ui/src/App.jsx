@@ -15,15 +15,22 @@ export default function App() {
     <ThemeProvider>
       {loading && <SplashScreen onComplete={() => setLoading(false)} />}
       <BrowserRouter>
-        <PageLayout>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/chat" element={<ChatPage />} />
-            <Route path="/trading" element={<TradingPage />} />
-            <Route path="/evaluation" element={<EvaluationPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </PageLayout>
+        <Routes>
+          <Route path="/chat" element={<ChatPage />} />
+          <Route
+            path="/*"
+            element={
+              <PageLayout>
+                <Routes>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/trading" element={<TradingPage />} />
+                  <Route path="/evaluation" element={<EvaluationPage />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </PageLayout>
+            }
+          />
+        </Routes>
       </BrowserRouter>
     </ThemeProvider>
   );

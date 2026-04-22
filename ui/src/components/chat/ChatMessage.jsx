@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
-import { User } from "lucide-react";
+import { User, ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 import SourceCard from "./SourceCard";
 import StockCard from "./StockCard";
+import PortfolioOverviewCard from "./PortfolioOverviewCard";
 import warrenAvatar from "../../assets/warren-avatar-sm.png";
 
 function useTypingEffect(text, enabled) {
@@ -61,6 +63,11 @@ export default function ChatMessage({ message, animate = false }) {
 
       {/* Content */}
       <div className={`max-w-[80%] space-y-2 ${isUser ? "text-right" : ""}`}>
+        {/* Portfolio overview card — for portfolio analysis responses */}
+        {!isUser && message.type === "portfolio-overview" && message.portfolio_data && (
+          <PortfolioOverviewCard data={message.portfolio_data} />
+        )}
+
         {/* Stock data card — shown above text for stock queries */}
         {!isUser && message.stock_data && (
           <StockCard data={message.stock_data} />
@@ -78,6 +85,16 @@ export default function ChatMessage({ message, animate = false }) {
             <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-slate-1000 dark:bg-red-400" />
           )}
         </div>
+
+        {/* View Detailed Analysis link — for Buffett opinion responses */}
+        {done && message.buffett_analysis && (
+          <Link
+            to={`/trading?tab=trading&symbol=${message.buffett_analysis.stock_data?.ticker || ""}`}
+            className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-100 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+          >
+            View Detailed Analysis <ArrowRight size={14} />
+          </Link>
+        )}
 
         {/* Sources — show after typing finishes */}
         {done && message.sources?.length > 0 && (

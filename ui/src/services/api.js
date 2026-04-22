@@ -1,8 +1,8 @@
-export async function sendMessage(question) {
+export async function sendMessage(question, history = []) {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, history }),
   });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();

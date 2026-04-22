@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Plus, Trash2, BarChart3, Loader2, Quote, Shield, Pencil, Check, X } from "lucide-react";
 import { fetchBuffettAnalysis } from "../../services/api";
+import { scoreHex, getScoreStyle } from "../../utils/buffettScoring";
+import DonutChart from "../shared/DonutChart";
 
 const SUGGESTED_STOCKS = [
   { symbol: "AAPL", name: "Apple" },
@@ -14,37 +16,6 @@ const SUGGESTED_STOCKS = [
   { symbol: "TSLA", name: "Tesla" },
   { symbol: "AMZN", name: "Amazon" },
 ];
-
-const SCORE_HEX = { strong: "#10b981", mixed: "#f59e0b", weak: "#ef4444", none: "#94a3b8" };
-
-function scoreHex(passRate) {
-  if (passRate >= 0.7) return SCORE_HEX.strong;
-  if (passRate >= 0.4) return SCORE_HEX.mixed;
-  return SCORE_HEX.weak;
-}
-
-function getScoreStyle(passRate) {
-  if (passRate >= 0.7)
-    return {
-      bg: "bg-emerald-50 dark:bg-emerald-500/10",
-      text: "text-emerald-700 dark:text-emerald-400",
-      badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
-      label: "Strong",
-    };
-  if (passRate >= 0.4)
-    return {
-      bg: "bg-amber-50 dark:bg-amber-500/10",
-      text: "text-amber-700 dark:text-amber-400",
-      badge: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
-      label: "Mixed",
-    };
-  return {
-    bg: "bg-red-50 dark:bg-red-500/10",
-    text: "text-red-700 dark:text-red-400",
-    badge: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
-    label: "Weak",
-  };
-}
 
 const moatColor = {
   Wide: "text-emerald-600 dark:text-emerald-400",
@@ -67,48 +38,6 @@ const criteriaColor = {
   fail: "bg-red-500",
 };
 
-// ── Donut chart ──────────────────────────────────────────────────────────────
-function DonutChart({ segments, centerLabel, centerSub }) {
-  const r = 58;
-  const cx = 72;
-  const cy = 72;
-  const circumference = 2 * Math.PI * r;
-  const total = segments.reduce((s, seg) => s + seg.value, 0) || 1;
-  const gap = segments.length > 1 ? circumference * (1.8 / 360) : 0;
-
-  let accumulated = 0;
-  return (
-    <svg width="144" height="144" viewBox="0 0 144 144" className="overflow-visible">
-      {/* track */}
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e2e8f0" strokeWidth="22"
-        className="dark:[stroke:#1e293b]" />
-      {segments.map((seg, i) => {
-        const dash = Math.max(0, (seg.value / total) * circumference - gap);
-        const rotate = (accumulated / total) * 360 - 90;
-        accumulated += seg.value;
-        return (
-          <circle
-            key={i}
-            cx={cx} cy={cy} r={r}
-            fill="none"
-            stroke={seg.color}
-            strokeWidth="22"
-            strokeLinecap="butt"
-            strokeDasharray={`${dash} ${circumference - dash}`}
-            transform={`rotate(${rotate}, ${cx}, ${cy})`}
-            style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,.15))" }}
-          />
-        );
-      })}
-      {/* center label */}
-      <text x={cx} y={cy - 7} textAnchor="middle" fill="currentColor"
-        fontSize="20" fontWeight="700">{centerLabel}</text>
-      <text x={cx} y={cx + 11} textAnchor="middle" fill="#94a3b8"
-        fontSize="9" fontWeight="500" letterSpacing="0.08em">{centerSub}</text>
-    </svg>
-  );
-}
-
 // ── Score card ────────────────────────────────────────────────────────────────
 function ScoreCard({ label, value, colorClass = "text-slate-900 dark:text-slate-100", sub }) {
   return (
@@ -121,18 +50,23 @@ function ScoreCard({ label, value, colorClass = "text-slate-900 dark:text-slate-
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function TradeLikeBuffett() {
+export default function TradeLikeBuffett({ initialHoldings = null }) {
   const [tickerInput, setTickerInput] = useState("");
   const [weightInput, setWeightInput] = useState("");
-  const [holdings, setHoldings] = useState([
-    { symbol: "AAPL", weight: 42 },
-    { symbol: "BAC", weight: 13 },
-    { symbol: "AXP", weight: 10 },
-    { symbol: "KO", weight: 9 },
-    { symbol: "CVX", weight: 14 },
-    { symbol: "OXY", weight: 12 },
-  ]);
+  const [holdings, setHoldings] = useState(
+    initialHoldings && initialHoldings.length > 0
+      ? initialHoldings
+      : [
+          { symbol: "AAPL", weight: 42 },
+          { symbol: "BAC", weight: 13 },
+          { symbol: "AXP", weight: 10 },
+          { symbol: "KO", weight: 9 },
+          { symbol: "CVX", weight: 14 },
+          { symbol: "OXY", weight: 12 },
+        ]
+  );
   const [analyzed, setAnalyzed] = useState(false);
+  const autoAnalyzed = useRef(false);
   const [editingSymbol, setEditingSymbol] = useState(null);
   const [editWeight, setEditWeight] = useState("");
   const [tooltip, setTooltip] = useState(null); // { x, y, item }
@@ -143,6 +77,14 @@ export default function TradeLikeBuffett() {
   const [error, setError] = useState(null);
 
   const totalWeight = holdings.reduce((sum, h) => sum + h.weight, 0);
+
+  // Auto-analyze when navigating from chat with initialHoldings
+  useEffect(() => {
+    if (initialHoldings && initialHoldings.length > 0 && !autoAnalyzed.current) {
+      autoAnalyzed.current = true;
+      analyzePortfolio();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function addHolding() {
     const sym = tickerInput.trim().toUpperCase();

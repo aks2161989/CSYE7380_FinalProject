@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { LineChart, FlaskConical, Sparkles } from "lucide-react";
 import StockSelector from "../components/trading/StockSelector";
 import PriceChart from "../components/trading/PriceChart";
@@ -18,14 +19,28 @@ const tabs = [
 ];
 
 export default function TradingPage() {
-  const [activeTab, setActiveTab] = useState("buffett");
-  const [selectedSymbol, setSelectedSymbol] = useState("AAPL");
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = searchParams.get("tab");
+    return tabs.some((t) => t.id === tab) ? tab : "buffett";
+  });
+  const [selectedSymbol, setSelectedSymbol] = useState(() => {
+    return searchParams.get("symbol")?.toUpperCase() || "AAPL";
+  });
   const [priceData, setPriceData] = useState([]);
   const [priceLoading, setPriceLoading] = useState(false);
   const [period, setPeriod] = useState("6mo");
   const [fundamentals, setFundamentals] = useState(null);
   const [fundamentalsLoading, setFundamentalsLoading] = useState(false);
   const [backtestPriceData, setBacktestPriceData] = useState(null);
+
+  // Sync state from URL params when they change (e.g., navigating from chat)
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    const symbol = searchParams.get("symbol");
+    if (tab && tabs.some((t) => t.id === tab)) setActiveTab(tab);
+    if (symbol) setSelectedSymbol(symbol.toUpperCase());
+  }, [searchParams]);
 
   useEffect(() => {
     setPriceLoading(true);
@@ -111,7 +126,20 @@ export default function TradingPage() {
       </div>
 
       {/* Trade like Buffett Tab */}
-      {activeTab === "buffett" && <TradeLikeBuffett />}
+      {activeTab === "buffett" && (
+        <TradeLikeBuffett
+          initialHoldings={(() => {
+            const h = searchParams.get("holdings");
+            if (!h) return null;
+            try {
+              return h.split(",").map((s) => {
+                const [symbol, weight] = s.split(":");
+                return { symbol: symbol.toUpperCase(), weight: parseFloat(weight) };
+              }).filter((x) => x.symbol && !isNaN(x.weight) && x.weight > 0);
+            } catch { return null; }
+          })()}
+        />
+      )}
 
       {/* Stock Trading Tab */}
       {activeTab === "trading" && (

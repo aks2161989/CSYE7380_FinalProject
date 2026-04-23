@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 
@@ -112,6 +112,10 @@ function RawTable({ tableData }) {
 export default function FundamentalsPanel({ data, loading }) {
   const [buffettTake, setBuffettTake] = useState(null);
   const [buffettLoading, setBuffettLoading] = useState(false);
+
+  useEffect(() => {
+    setBuffettTake(null);
+    }, [data?.symbol]);
 
   if (loading) {
     return (

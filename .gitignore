@@ -6,3 +6,6 @@ __pycache__/
 venv/
 .claude/
 .DS_Store
+DataIngestionDiagram.md
+docs/data_ingestion.md
+docs/rag_pipeline.md

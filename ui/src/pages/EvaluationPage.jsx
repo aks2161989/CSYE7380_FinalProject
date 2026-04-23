@@ -1,6 +1,146 @@
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { fetchSearchMethodEval, fetchChunkSizeEval, fetchTestSuite } from "../services/api";
+import { fetchSearchMethodEval, fetchChunkSizeEval, fetchTestSuite, fetchEmbeddingProjection } from "../services/api";
+
+// Color palette for source categories
+const SOURCE_COLORS = {
+  shareholder_letter: "#ef4444",
+  qa_personal_life: "#3b82f6",
+  qa_adaptability: "#10b981",
+  qa_psychology: "#f59e0b",
+  qa_risk_management: "#8b5cf6",
+  qa_strategy_development: "#ec4899",
+  qa_timing: "#06b6d4",
+  qa_investor_psychology: "#f97316",
+  qa_intrinsic_value: "#14b8a6",
+  qa_patience_and_discipline: "#a855f7",
+  qa_economic_moats: "#84cc16",
+  qa_uncategorized: "#64748b",
+  qa_business_evaluation: "#d946ef",
+  qa_capital_allocation: "#0ea5e9",
+  qa_market_behavior: "#eab308",
+  qa_management_philosophy: "#22c55e",
+};
+
+function formatSourceLabel(source) {
+  if (source === "shareholder_letter") return "Shareholder Letter";
+  return source.replace("qa_", "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function EmbeddingScatter({ data }) {
+  const [selectedPoint, setSelectedPoint] = useState(null);
+  const [visibleSources, setVisibleSources] = useState(
+    Object.fromEntries(Object.keys(data.source_counts).map((k) => [k, true]))
+  );
+
+  const W = 720;
+  const H = 480;
+  const PAD = 30;
+
+  // Map from [-1, 1] to pixel coords
+  const toX = (x) => PAD + ((x + 1) / 2) * (W - 2 * PAD);
+  const toY = (y) => PAD + ((1 - y) / 2) * (H - 2 * PAD);
+
+  const filteredPoints = data.points.filter((p) => visibleSources[p.source]);
+
+  const toggleSource = (src) => {
+    setVisibleSources((prev) => ({ ...prev, [src]: !prev[src] }));
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-start gap-6">
+        <svg
+          width={W}
+          height={H}
+          className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+        >
+          {filteredPoints.map((p, i) => {
+            const isSelected = selectedPoint === p;
+            return (
+              <circle
+                key={i}
+                cx={toX(p.x)}
+                cy={toY(p.y)}
+                r={isSelected ? 6 : 2.5}
+                fill={SOURCE_COLORS[p.source] || "#999"}
+                opacity={isSelected ? 1 : 0.6}
+                stroke={isSelected ? "#000" : "none"}
+                strokeWidth={isSelected ? 2 : 0}
+                onClick={() => setSelectedPoint(p)}
+                onMouseEnter={() => setSelectedPoint(p)}
+                style={{ cursor: "pointer" }}
+              />
+            );
+          })}
+        </svg>
+
+        <div className="flex-1 min-w-[220px] space-y-1.5">
+          <p className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+            Click to toggle categories
+          </p>
+          {Object.entries(data.source_counts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([src, count]) => (
+              <button
+                key={src}
+                onClick={() => toggleSource(src)}
+                className={`flex w-full items-center gap-2 rounded px-2 py-1 text-xs transition ${
+                  visibleSources[src]
+                    ? "bg-slate-50 dark:bg-slate-800"
+                    : "opacity-40 hover:opacity-60"
+                }`}
+              >
+                <span
+                  className="h-3 w-3 shrink-0 rounded-full"
+                  style={{ backgroundColor: SOURCE_COLORS[src] || "#999" }}
+                />
+                <span className="flex-1 text-left text-slate-700 dark:text-slate-300">
+                  {formatSourceLabel(src)}
+                </span>
+                <span className="font-mono text-slate-500 dark:text-slate-400">
+                  {count}
+                </span>
+              </button>
+            ))}
+        </div>
+      </div>
+
+      {/* Persistent info card for selected point */}
+      <div className="min-h-[140px] rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900">
+        {selectedPoint ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span
+                className="h-3 w-3 shrink-0 rounded-full"
+                style={{ backgroundColor: SOURCE_COLORS[selectedPoint.source] || "#999" }}
+              />
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {formatSourceLabel(selectedPoint.source)}
+              </span>
+              <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
+                ({selectedPoint.x.toFixed(2)}, {selectedPoint.y.toFixed(2)})
+              </span>
+            </div>
+            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+              {selectedPoint.preview}
+              {selectedPoint.preview.length >= 400 && "..."}
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm italic text-slate-400 dark:text-slate-500">
+            Hover over or click a point to see the document preview.
+          </p>
+        )}
+      </div>
+
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Showing {data.total_sampled.toLocaleString()} of {data.total_documents.toLocaleString()} document embeddings,
+        projected from 384 dimensions to 2D using UMAP. Points that cluster together are semantically similar.
+      </p>
+    </div>
+  );
+}
 
 function MetricCard({ label, value, highlight }) {
   return (
@@ -49,11 +189,13 @@ export default function EvaluationPage() {
   const [searchResults, setSearchResults] = useState(null);
   const [chunkResults, setChunkResults] = useState(null);
   const [testSuite, setTestSuite] = useState(null);
+  const [projection, setProjection] = useState(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [chunkLoading, setChunkLoading] = useState(false);
 
   useEffect(() => {
     fetchTestSuite().then(setTestSuite).catch(console.error);
+    fetchEmbeddingProjection().then(setProjection).catch((e) => console.warn("No projection yet", e));
   }, []);
 
   const runSearchEval = async () => {
@@ -93,6 +235,22 @@ export default function EvaluationPage() {
           Demonstrates why hybrid search with cross-encoder reranking outperforms FAISS alone.
         </p>
       </div>
+
+      {/* Section 0: Embedding Space Visualization */}
+      {projection && (
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
+              Embedding Space Visualization
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              UMAP 2D projection of {projection.total_documents.toLocaleString()} document embeddings from the
+              knowledge base, colored by source category. Semantically similar documents cluster together.
+            </p>
+          </div>
+          <EmbeddingScatter data={projection} />
+        </section>
+      )}
 
       {/* Section 1: Search Method Comparison */}
       <section className="space-y-4">

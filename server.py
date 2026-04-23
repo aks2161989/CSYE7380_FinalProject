@@ -397,3 +397,20 @@ def eval_test_suite():
     from evaluate import TEST_SUITE
 
     return TEST_SUITE
+
+
+@app.get("/api/evaluation/embedding-projection")
+def embedding_projection():
+    """Return the pre-computed UMAP 2D projection of document embeddings."""
+    import json
+    import os
+    from config import VECTORSTORE_DIR
+
+    path = os.path.join(VECTORSTORE_DIR, "umap_projection.json")
+    if not os.path.exists(path):
+        raise HTTPException(
+            status_code=404,
+            detail="Projection not yet computed. Run: python visualize.py",
+        )
+    with open(path) as f:
+        return json.load(f)

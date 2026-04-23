@@ -1,3 +1,4 @@
+vector_store/
 vectorstore/
 __pycache__/
 *.pyc

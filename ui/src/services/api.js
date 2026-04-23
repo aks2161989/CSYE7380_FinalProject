@@ -79,3 +79,9 @@ export async function fetchTestSuite() {
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
+
+export async function fetchEmbeddingProjection() {
+  const res = await fetch("/api/evaluation/embedding-projection");
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}

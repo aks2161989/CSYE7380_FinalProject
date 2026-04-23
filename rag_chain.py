@@ -68,7 +68,7 @@ def format_chat_history(history):
 
 
 def build_groq_prompt(question, context, chat_history=""):
-    """Build the detailed prompt for Groq."""
+    """Build the detailed prompt for Groq with inline citation support."""
     history_block = ""
     if chat_history:
         history_block = f"""
@@ -79,16 +79,18 @@ Previous conversation:
     return f"""You are a Warren Buffett trader/investor chatbot built from team-prepared study material.
 Answer the user's question using ONLY the retrieved context below.
 {history_block}Rules:
-- Do not mention "Context 1", "Context 2", or similar references.
-- Do not say "according to the context".
-- Give a direct, natural answer.
-- Prefer 2-4 sentences.
+- Give a direct, natural answer in 2-4 sentences.
+- Add inline citations using [1], [2], [3] etc. after each factual claim, referring to the numbered context blocks above.
+- Every sentence that makes a factual claim MUST have at least one citation.
+- Multiple citations can be combined like [1][3] when a claim draws from multiple sources.
+- Do NOT write "according to the context" or "Context 1 says" -- just use the bracket citations.
 - Be specific when the dataset supports specifics.
 - If this is a follow-up question, use the conversation history to understand what the user is referring to.
-- If the question asks how Buffett adapted or evolved, prioritize concrete historical changes in his strategy (e.g., shift from buying cheap stocks to high-quality businesses) if present in the context.
-- Avoid vague summaries like "he learned from experience" unless no more specific answer is available.
 - If the answer is not clearly supported by the retrieved material, say:
   "I don't have enough grounded information in the dataset to answer that confidently."
+
+Example of good citation:
+"Buffett views return on equity as a more meaningful measure than earnings growth [1]. He looks for companies with consistent ROE above 15% [2][3]."
 
 Retrieved Context:
 {context}
@@ -108,8 +110,10 @@ Analyze the stock using Buffett's principles. Be specific about the numbers.
 
 Rules:
 - Reference actual metrics (P/E, ROE, debt, margins) from the stock data.
-- If backtest results are available, mention how trading strategies (MA crossover, RSI) performed on this stock -- this shows the stock's historical trading behavior.
+- If backtest results are available, mention how trading strategies (MA crossover, RSI) performed on this stock.
 - Apply Buffett's known criteria: margin of safety, economic moat, return on equity, low debt, consistent earnings, competent management.
+- Add inline citations [1], [2], [3] after claims drawn from the Buffett's Investment Principles section.
+- Claims about the stock's own numbers (from Stock Data) do not need citations.
 - Give a clear assessment: would Buffett likely be interested or not, and why.
 - Be honest about limitations -- you cannot predict the future and backtests reflect past performance only.
 - Keep it to 5-8 sentences.

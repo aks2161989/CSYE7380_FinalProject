@@ -9,11 +9,12 @@ Features:
 """
 
 import os
+import re
 
 from dotenv import load_dotenv
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-from config import VECTORSTORE_DIR, EMBEDDING_MODEL, LOCAL_MODEL, GROQ_MODEL, TOP_K
+from config import VECTORSTORE_DIR, EMBEDDING_MODEL, LOCAL_MODEL, GROQ_MODEL, TOP_K, ENABLE_CITATIONS
 from retriever import retrieve, get_vectorstore, get_reranker
 from stock_analysis import is_stock_query, extract_ticker, fetch_stock_data, format_stock_summary
 
@@ -56,6 +57,21 @@ def build_context(docs):
     return "\n\n".join(context_parts)
 
 
+def validate_citations(answer, num_sources):
+    """Remove citation markers that reference non-existent sources."""
+    def replace_invalid(match):
+        n = int(match.group(1))
+        if 1 <= n <= num_sources:
+            return match.group(0)
+        return ""
+    return re.sub(r'\[(\d+)\]', replace_invalid, answer)
+
+
+def strip_citations(answer):
+    """Remove all citation markers from answer text."""
+    return re.sub(r'\s*\[\d+\]', '', answer)
+
+
 def format_chat_history(history):
     """Format conversation history for the prompt."""
     if not history:
@@ -76,21 +92,25 @@ Previous conversation:
 {chat_history}
 
 """
+    if ENABLE_CITATIONS:
+        citation_rules = """- When you use information from the retrieved context, cite the source by placing the context number in square brackets, e.g. [1], [2].
+- Only cite sources you actually used. Do not fabricate citation numbers.
+- Place the citation at the end of the sentence or claim it supports.
+- Do not say "according to the context"."""
+    else:
+        citation_rules = """- Do not mention "Context 1", "Context 2", or similar references.
+- Do not say "according to the context"."""
+
     return f"""You are a Warren Buffett trader/investor chatbot built from team-prepared study material.
 Answer the user's question using ONLY the retrieved context below.
 {history_block}Rules:
-- Give a direct, natural answer in 2-4 sentences.
-- Add inline citations using [1], [2], [3] etc. after each factual claim, referring to the numbered context blocks above.
-- Every sentence that makes a factual claim MUST have at least one citation.
-- Multiple citations can be combined like [1][3] when a claim draws from multiple sources.
-- Do NOT write "according to the context" or "Context 1 says" -- just use the bracket citations.
+{citation_rules}
+- Give a direct, natural answer.
+- Prefer 2-4 sentences.
 - Be specific when the dataset supports specifics.
 - If this is a follow-up question, use the conversation history to understand what the user is referring to.
 - If the answer is not clearly supported by the retrieved material, say:
   "I don't have enough grounded information in the dataset to answer that confidently."
-
-Example of good citation:
-"Buffett views return on equity as a more meaningful measure than earnings growth [1]. He looks for companies with consistent ROE above 15% [2][3]."
 
 Retrieved Context:
 {context}
@@ -101,6 +121,10 @@ User Question:
 
 def build_stock_groq_prompt(question, context, stock_summary):
     """Build a prompt that combines stock data, backtest results, and Buffett's principles."""
+    citation_rule = ""
+    if ENABLE_CITATIONS:
+        citation_rule = "\n- Cite retrieved Buffett principles using [1], [2], etc. matching the context numbers. Do not cite the stock data section — it is not numbered."
+
     return f"""You are a Warren Buffett-style investment analyst. The user is asking about a specific stock.
 You have three sources of information:
 1. Real financial data and backtest results for the stock (below)
@@ -116,7 +140,7 @@ Rules:
 - Claims about the stock's own numbers (from Stock Data) do not need citations.
 - Give a clear assessment: would Buffett likely be interested or not, and why.
 - Be honest about limitations -- you cannot predict the future and backtests reflect past performance only.
-- Keep it to 5-8 sentences.
+- Keep it to 5-8 sentences.{citation_rule}
 
 Stock Data & Backtest Results:
 {stock_summary}
@@ -218,6 +242,12 @@ def ask(question, history=None):
         outputs = model.generate(**inputs, max_new_tokens=256)
         answer = tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
 
+    # Post-process citations
+    if ENABLE_CITATIONS:
+        answer = validate_citations(answer, len(docs))
+    else:
+        answer = strip_citations(answer)
+
     # Format sources for display
     sources = []
     if stock_data:
@@ -236,6 +266,8 @@ def ask(question, history=None):
     result = {"answer": answer, "sources": sources}
     if stock_data:
         result["stock_data"] = stock_data
+    if ENABLE_CITATIONS:
+        result["citation_offset"] = 1 if stock_data else 0
     return result
 
 

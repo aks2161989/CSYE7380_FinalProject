@@ -1,43 +1,46 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { User, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import SourceCard from "./SourceCard";
 import StockCard from "./StockCard";
 import PortfolioOverviewCard from "./PortfolioOverviewCard";
+import { parseCitations } from "../../utils/citationParser";
 import warrenAvatar from "../../assets/warren-avatar-sm.png";
 
-function renderWithCitations(text, onCitationClick) {
-  if (!text) return null;
-  // Match [1], [2], [1][2][3], etc.
-  const parts = [];
-  const regex = /\[(\d+)\]/g;
-  let lastIndex = 0;
-  let match;
-  let key = 0;
+function CitationMarker({ number, citationOffset, messageIndex }) {
+  const sourceIndex = number - 1 + citationOffset;
 
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
+  const handleClick = () => {
+    const el = document.getElementById(`source-card-${messageIndex}-${sourceIndex}`);
+    if (el) {
+      el.dispatchEvent(new CustomEvent("citation-click"));
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
-    const num = parseInt(match[1], 10);
-    parts.push(
-      <button
-        key={`cite-${key++}`}
-        onClick={() => onCitationClick(num - 1)}
-        className="mx-0.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-red-100 px-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-200 dark:bg-red-500/20 dark:text-red-300 dark:hover:bg-red-500/30"
-        title={`Jump to source ${num}`}
-      >
-        {num}
-      </button>
-    );
-    lastIndex = regex.lastIndex;
-  }
+  };
 
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
-  }
+  return (
+    <button
+      onClick={handleClick}
+      className="inline-flex items-center justify-center ml-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:hover:bg-blue-500/30 transition-colors cursor-pointer align-super leading-none"
+      title={`Source ${sourceIndex + 1}`}
+    >
+      {number}
+    </button>
+  );
+}
 
-  return parts.length > 0 ? parts : text;
+function renderWithCitations(text, citationOffset = 0, messageIndex = 0) {
+  const segments = parseCitations(text);
+  if (segments.length === 1 && segments[0].type === "text") {
+    return text;
+  }
+  return segments.map((seg, i) =>
+    seg.type === "citation" ? (
+      <CitationMarker key={i} number={seg.number} citationOffset={citationOffset} messageIndex={messageIndex} />
+    ) : (
+      <span key={i}>{seg.value}</span>
+    )
+  );
 }
 
 function useTypingEffect(text, enabled) {
@@ -71,23 +74,12 @@ function useTypingEffect(text, enabled) {
   return { displayed, done };
 }
 
-export default function ChatMessage({ message, animate = false }) {
+export default function ChatMessage({ message, animate = false, messageIndex = 0 }) {
   const isUser = message.role === "user";
   const { displayed, done } = useTypingEffect(
     message.content,
     animate && !isUser
   );
-  const sourceRefs = useRef([]);
-  const [highlighted, setHighlighted] = useState(null);
-
-  const handleCitationClick = (idx) => {
-    const el = sourceRefs.current[idx];
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      setHighlighted(idx);
-      setTimeout(() => setHighlighted(null), 2000);
-    }
-  };
 
   return (
     <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
@@ -125,7 +117,11 @@ export default function ChatMessage({ message, animate = false }) {
               : "bg-slate-200 text-slate-800 rounded-tl-sm dark:bg-slate-800 dark:text-slate-200"
           }`}
         >
-          {isUser ? message.content : renderWithCitations(displayed, handleCitationClick)}
+          {isUser
+            ? message.content
+            : message.citation_offset !== undefined
+              ? renderWithCitations(displayed, message.citation_offset, messageIndex)
+              : displayed}
           {!isUser && !done && (
             <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-slate-1000 dark:bg-red-400" />
           )}
@@ -145,15 +141,7 @@ export default function ChatMessage({ message, animate = false }) {
         {done && message.sources?.length > 0 && (
           <div className="space-y-1.5">
             {message.sources.map((src, i) => (
-              <div
-                key={i}
-                ref={(el) => (sourceRefs.current[i] = el)}
-                className={`transition-all duration-500 ${
-                  highlighted === i ? "ring-2 ring-red-400 rounded-xl" : ""
-                }`}
-              >
-                <SourceCard source={src} index={i} />
-              </div>
+              <SourceCard key={i} source={src} index={i} messageIndex={messageIndex} />
             ))}
           </div>
         )}

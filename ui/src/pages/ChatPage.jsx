@@ -261,6 +261,7 @@ export default function ChatPage() {
         content: result.answer,
         sources: result.sources,
         stock_data: result.stock_data,
+        ...(result.citation_offset !== undefined && { citation_offset: result.citation_offset }),
         ...(buffettAnalysis && { buffett_analysis: buffettAnalysis }),
       };
       setConversations((prev) =>
@@ -356,6 +357,7 @@ export default function ChatPage() {
                     key={i}
                     message={msg}
                     animate={i === animatingIdx}
+                    messageIndex={i}
                   />
                 ))}
                 {loading && (

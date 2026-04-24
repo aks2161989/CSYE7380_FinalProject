@@ -3,13 +3,23 @@ server.py -- FastAPI wrapper around the existing RAG pipeline.
 
 Run with:  uvicorn server:app --reload --port 8000
 """
-
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from pydantic import BaseModel
 
-app = FastAPI(title="Buffett RAG API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from retriever import get_vectorstore, get_bm25, get_reranker
+    from rag_chain import get_llm
+    get_vectorstore()
+    get_bm25()
+    get_reranker()
+    get_llm()
+    yield
+    
+app = FastAPI(title="Buffett RAG API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

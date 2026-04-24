@@ -122,4 +122,4 @@ In `data/`:
 | Backtesting | Custom (MA Crossover, RSI) |
 | Backend | FastAPI + Uvicorn |
 | Frontend | React + Vite + Tailwind CSS |
-| Evaluation | Custom benchmark suite (10 questions, 3 metrics) |
+| Evaluation | Custom benchmark suite (10 questions, 3 metrics) | 

@@ -230,3 +230,176 @@ graph TD
     style RAG fill:#bfb,stroke:#333
     style RETRIEVER fill:#fbf,stroke:#333
 ```
+
+## Trading Page UI Flow (React)
+
+The React `TradingPage` has three sub-tabs: Trade like Buffett, Stock Trading, and Backtesting.
+
+```mermaid
+flowchart TD
+    USER([User]) --> TP[TradingPage — /trading]
+    TP --> TABS{Active Tab}
+
+    subgraph T1[Tab 1 · Trade like Buffett]
+        PORT[Portfolio builder: add symbols + weights]
+        SUGG[Suggested stocks: AAPL KO BAC JPM ...]
+        ANALYZE[Click: Analyze Portfolio]
+        API_BA[POST /api/stock/buffett-analysis]
+        SCORE[ScoreCard: ROE / D/E / Profit Margin / P/E]
+        DONUT[DonutChart: pass / caution / fail breakdown]
+        MOAT[Moat Rating: Wide / Narrow / None]
+        VERDICT[BuffettVerdict — RAG-generated commentary]
+        CRITERIA[Criteria list with color-coded pass/caution/fail bars]
+
+        PORT --> ANALYZE
+        SUGG --> PORT
+        ANALYZE --> API_BA
+        API_BA --> SCORE
+        API_BA --> DONUT
+        API_BA --> MOAT
+        API_BA --> VERDICT
+        API_BA --> CRITERIA
+    end
+
+    subgraph T2[Tab 2 · Stock Trading]
+        SEL[StockSelector dropdown]
+        PERIOD[Period selector: 1M 3M 6M 1Y]
+        PRICE_API[GET /api/stock/prices/symbol]
+        FUND_API[GET /api/stock/fundamentals/symbol]
+        PCHART[PriceChart — Recharts line chart]
+        FPANEL[FundamentalsPanel — 11 Buffett ratios with pass/fail]
+
+        SEL --> PRICE_API
+        PERIOD --> PRICE_API
+        SEL --> FUND_API
+        PRICE_API --> PCHART
+        FUND_API --> FPANEL
+    end
+
+    subgraph T3[Tab 3 · Backtesting]
+        BFORM[BacktestForm: symbol / strategy / dates / MA or RSI params]
+        RUN[Click: Run Backtest]
+        BT_API[POST /api/backtest]
+        BRESULT[BacktestResults: 6 metrics]
+        SCHART[SignalChart: price + buy/sell markers]
+        ECHART[EquityChart: equity curve + drawdown]
+        TTABLE[TradesTable: entry/exit/PnL per trade]
+        TAKE_API[POST /api/backtest/buffett-take]
+        TAKE_BOX[Buffett commentary box — green/amber/red based on Sharpe + win rate]
+
+        BFORM --> RUN
+        RUN --> BT_API
+        BT_API --> BRESULT
+        BT_API --> SCHART
+        BT_API --> ECHART
+        BT_API --> TTABLE
+        BT_API --> TAKE_API
+        TAKE_API --> TAKE_BOX
+    end
+
+    TABS -- Trade like Buffett --> T1
+    TABS -- Stock Trading --> T2
+    TABS -- Backtesting --> T3
+```
+
+## Buffett Ratio Computation Pipeline
+
+```mermaid
+flowchart TD
+    YF[yfinance.Ticker symbol] --> FIN[ticker.financials]
+    YF --> BS[ticker.balancesheet]
+    YF --> CF[ticker.cashflow]
+
+    subgraph IS[Income Statement — fin]
+        FIN --> GM["Gross Margin = Gross Profit / Revenue  →  ≥ 40%"]
+        FIN --> SGA["SG&A Margin = SG&A / Gross Profit  →  ≤ 30%"]
+        FIN --> RND["R&D Margin = R&D / Gross Profit  →  ≤ 30%"]
+        FIN --> DEPR["Depreciation Margin = Depr / Gross Profit  →  ≤ 10%"]
+        FIN --> INT["Interest Expense Margin = Interest / Operating Income  →  ≤ 15%"]
+        FIN --> TAX["Income Tax Rate = Tax Provision / Pretax Income  →  ≈ 21%"]
+        FIN --> NPM["Net Profit Margin = Net Income / Revenue  →  ≥ 20%"]
+        FIN --> EPS["EPS Growth = EPS[t] / EPS[t-1]  →  > 1.0x"]
+    end
+
+    subgraph BSR[Balance Sheet — bs]
+        BS --> CDR["Cash > Debt Ratio = Cash / Current Debt  →  > 1.0x"]
+        BS --> DER["Adj Debt to Equity = Total Debt / (Assets − Debt)  →  < 0.80x"]
+    end
+
+    subgraph CFR[Cash Flow — cf]
+        CF --> CAPEX["CapEx Margin = CapEx / Net Income  →  < 25%"]
+    end
+
+    GM & SGA & RND & DEPR & INT & TAX & NPM & EPS --> EVAL[passes_rule]
+    CDR & DER & CAPEX --> EVAL
+    EVAL --> PASS["✅ Pass"]
+    EVAL --> FAIL["❌ Fail"]
+    EVAL --> INFO["ℹ️ Informational"]
+```
+
+## MA Crossover Strategy Logic
+
+```mermaid
+flowchart TD
+    SYM[Symbol + start date] --> DL[download_price_data — yfinance]
+    DL --> CLOSE[Close price series]
+
+    CLOSE --> SMAS["SMA_Short = Close.rolling(short_window).mean()"]
+    CLOSE --> SMAL["SMA_Long  = Close.rolling(long_window).mean()"]
+
+    SMAS --> SIG["Signal = 1 if SMA_Short > SMA_Long else 0"]
+    SMAL --> SIG
+
+    SIG --> POS["Position = Signal.shift(1)  — 1-day lag, no lookahead"]
+    CLOSE --> MR["Market_Return = Close.pct_change()"]
+    POS --> SR["Strategy_Return = Position × Market_Return"]
+    MR --> SR
+
+    SIG --> ET[extract_trades — detect 0→1 and 1→0 transitions]
+    ET --> TRADES["Trades DataFrame: Entry Date, Exit Date, Entry Price, Exit Price, PnL"]
+
+    SR --> CALC[calculate_metrics]
+    TRADES --> CALC
+    CALC --> RESULT[BacktestResult]
+```
+
+## RSI Strategy State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> OutOfPosition : Start
+
+    OutOfPosition : OUT OF POSITION\nPosition = 0
+
+    InPosition : IN POSITION\nPosition = 1\nAccumulating strategy returns
+
+    OutOfPosition --> InPosition : RSI < oversold threshold (default 30)\nEnter long — record entry date + price
+
+    InPosition --> OutOfPosition : RSI > overbought threshold (default 70)\nExit long — record PnL trade
+
+    InPosition --> OutOfPosition : End of data reached\nForce-close open trade at last price
+```
+
+## Backtest Metrics Calculation
+
+```mermaid
+flowchart TD
+    SR[Strategy_Return series] --> EC["Equity_Curve = (1 + r).cumprod()"]
+
+    EC --> TR["Total Return = Equity_Curve[-1] − 1"]
+    EC --> AR["Annualized Return = Equity_Curve[-1]^(252/trading_days) − 1"]
+
+    SR --> VOL["Volatility = std(r) × √252"]
+    AR --> SHARPE["Sharpe Ratio = Annualized Return / Volatility"]
+    VOL --> SHARPE
+
+    EC --> RM["Rolling Max = Equity_Curve.cummax()"]
+    RM --> DD["Drawdown = Equity_Curve / Rolling_Max − 1"]
+    DD --> MDD["Max Drawdown = min(Drawdown)"]
+
+    TRADES[Trades DataFrame] --> WR["Win Rate = mean(PnL > 0)"]
+    TRADES --> NT["# Trades = len(trades)"]
+
+    TR & AR & SHARPE & MDD & WR & NT --> RESULT[BacktestResult dataclass]
+    RESULT --> UI[Streamlit metrics + 3-panel chart]
+```

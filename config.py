@@ -33,5 +33,8 @@ GROQ_MODEL = "llama-3.3-70b-versatile"     # optional, needs GROQ_API_KEY env va
 # --- Retrieval ---
 TOP_K = 5               # number of chunks to retrieve from FAISS
 
+# --- Citations ---
+ENABLE_CITATIONS = True   # inline [1], [2] markers in answers; set False to disable
+
 # --- UI ---
 APP_TITLE = "Warren Buffett Knowledge Base"

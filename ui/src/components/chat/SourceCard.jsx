@@ -1,8 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChevronDown, FileText } from "lucide-react";
 
-export default function SourceCard({ source, index }) {
+export default function SourceCard({ source, index, messageIndex = 0 }) {
   const [open, setOpen] = useState(false);
+  const [highlighted, setHighlighted] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const handler = () => {
+      setOpen(true);
+      setHighlighted(true);
+      setTimeout(() => setHighlighted(false), 1500);
+    };
+    el.addEventListener("citation-click", handler);
+    return () => el.removeEventListener("citation-click", handler);
+  }, []);
 
   const label = source.source
     .replace("qa_", "Q&A: ")
@@ -12,7 +26,15 @@ export default function SourceCard({ source, index }) {
   const pageInfo = source.page != null ? ` (page ${source.page + 1})` : "";
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950/50">
+    <div
+      id={`source-card-${messageIndex}-${index}`}
+      ref={ref}
+      className={`rounded-lg border transition-all duration-300 ${
+        highlighted
+          ? "border-blue-400 ring-2 ring-blue-300 dark:border-blue-500 dark:ring-blue-500/30"
+          : "border-slate-200 dark:border-slate-800"
+      } bg-slate-50 dark:bg-slate-950/50`}
+    >
       <button
         onClick={() => setOpen(!open)}
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-800/30"
